@@ -22,6 +22,11 @@ body {
 		}
 	}
 
+	input,
+	button {
+		font-family: "Star4000";
+	}
+
 	&.kiosk {
 		margin: 0px;
 		padding: 0px;
@@ -30,6 +35,120 @@ body {
 		// Always use black background in kiosk mode, regardless of light/dark preference
 		background-color: #000000 !important;
 	}
+}
+
+// Mixin for CRT barrel distortion effects (applied to both #divTwcMain and #container)
+@mixin crt-effect {
+	position: relative;
+	
+	// CRT barrel distortion effect
+	// Creates the characteristic curved-edge bulge of old CRT monitors
+	
+	// Default (no attribute) and 0% - No effect
+	&:not([data-crt-strength]),
+	&[data-crt-strength="0"] {
+		filter: none;
+		border-radius: 0;
+		transform: none;
+	}
+	
+	// 25% strength
+	&[data-crt-strength="25"] {
+		filter: url('#crt-bulge-25');
+		border-radius: 8px;
+		transform: scale(1.01);
+		overflow: hidden;
+		
+		&::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			z-index: 10000;
+			background: radial-gradient(
+				ellipse at center,
+				transparent 50%,
+				rgba(0, 0, 0, 0.1) 90%,
+				rgba(0, 0, 0, 0.2) 100%
+			);
+		}
+	}
+	
+	// 50% strength
+	&[data-crt-strength="50"] {
+		filter: url('#crt-bulge-50');
+		border-radius: 15px;
+		transform: scale(1.02);
+		overflow: hidden;
+		
+		&::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			z-index: 10000;
+			background: radial-gradient(
+				ellipse at center,
+				transparent 45%,
+				rgba(0, 0, 0, 0.15) 85%,
+				rgba(0, 0, 0, 0.35) 100%
+			);
+		}
+	}
+	
+	// 75% strength
+	&[data-crt-strength="75"] {
+		filter: url('#crt-bulge-75');
+		border-radius: 22px;
+		transform: scale(1.03);
+		overflow: hidden;
+		
+		&::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			z-index: 10000;
+			background: radial-gradient(
+				ellipse at center,
+				transparent 40%,
+				rgba(0, 0, 0, 0.2) 80%,
+				rgba(0, 0, 0, 0.5) 100%
+			);
+		}
+	}
+	
+	// 100% strength
+	&[data-crt-strength="100"] {
+		filter: url('#crt-bulge-100');
+		border-radius: 30px;
+		transform: scale(1.04);
+		overflow: hidden;
+		
+		&::before {
+			content: '';
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			z-index: 10000;
+			background: radial-gradient(
+				ellipse at center,
+				transparent 35%,
+				rgba(0, 0, 0, 0.25) 75%,
+				rgba(0, 0, 0, 0.6) 100%
+			);
+		}
+	}
+}
+
+// Apply CRT barrel distortion to main container (normal mode)
+#divTwcMain {
+	@include crt-effect;
+}
+
+// Apply CRT barrel distortion to container (fullscreen mode)
+#container {
+	@include crt-effect;
 }
 
 #divQuery {
@@ -89,11 +208,6 @@ body {
 		}
 	}
 
-	input,
-	button {
-		font-family: "Star4000";
-	}
-
 	#txtLocation {
 		width: calc(100% - 170px);
 		max-width: 490px;
@@ -148,14 +262,12 @@ body {
 	width: 100%;
 	max-width: 640px;
 	margin: 0; // Ensure edge-to-edge display
+	animation: crt-startup 1.5s ease-out;
+	animation-fill-mode: backwards;
 
 	&.wide {
 		max-width: 854px;
 	}
-}
-
-.content-wrapper {
-	padding: 8px;
 }
 
 #divTwcMain {
@@ -442,6 +554,7 @@ body {
 		}
 	}
 }
+
 
 #divTwcBottom img {
 	transform: scale(0.75);
@@ -814,5 +927,102 @@ body.kiosk #loading .instructions {
 	// In kiosk mode, hide everything except the main weather display
 	>*:not(#divTwc) {
 		display: none !important;
+	}
+}
+
+*:focus {
+	outline: none;
+}
+
+// CRT Startup Animation
+@keyframes crt-startup {
+	0% {
+		opacity: 0;
+		transform: scaleY(0.01) scaleX(1.2);
+		filter: brightness(10);
+	}
+	10% {
+		opacity: 1;
+		transform: scaleY(0.8) scaleX(1.05);
+		filter: brightness(3);
+	}
+	25% {
+		transform: scaleY(1.05) scaleX(0.95);
+		filter: brightness(1.5);
+	}
+	40% {
+		transform: scaleY(0.98) scaleX(1.02);
+		filter: brightness(0.8);
+	}
+	60% {
+		transform: scaleY(1.01) scaleX(0.99);
+		filter: brightness(1.1);
+	}
+	80% {
+		transform: scaleY(1) scaleX(1);
+		filter: brightness(1);
+	}
+	100% {
+		opacity: 1;
+		transform: scaleY(1) scaleX(1);
+		filter: brightness(1);
+	}
+}
+
+// Enhanced scanline effects with glow and bloom
+#divTwcMain.show-scanlines::before {
+	// Add subtle glow effect
+	box-shadow: 
+		inset 0 0 100px rgba(255, 255, 255, 0.03),
+		inset 0 0 50px rgba(100, 150, 255, 0.02);
+}
+
+#divTwcMain.show-scanlines::after {
+	// Enhance existing scanlines with glow
+	background: repeating-linear-gradient(
+		0deg,
+		rgba(0, 0, 0, 0.15),
+		rgba(0, 0, 0, 0.15) 1px,
+		transparent 1px,
+		transparent 2px
+	);
+	pointer-events: none;
+	z-index: 1000;
+	filter: drop-shadow(0 0 2px rgba(100, 150, 255, 0.1));
+}
+
+// Add subtle bloom/distortion effect when scanlines are enabled
+#divTwcMain.show-scanlines {
+	filter: 
+		contrast(1.05)
+		brightness(1.02)
+		blur(0.3px);
+	
+	// Subtle chromatic aberration effect
+	text-shadow: 
+		0.5px 0 0 rgba(255, 0, 0, 0.05),
+		-0.5px 0 0 rgba(0, 255, 255, 0.05);
+}
+
+// Subtle vignette effect for scanlines
+#divTwcMain.show-scanlines {
+	position: relative;
+	
+	&::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		pointer-events: none;
+		z-index: 999;
+		background: radial-gradient(
+			ellipse at center,
+			transparent 0%,
+			transparent 60%,
+			rgba(0, 0, 0, 0.1) 90%,
+			rgba(0, 0, 0, 0.3) 100%
+		);
 	}
 }

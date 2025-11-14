@@ -3,7 +3,11 @@
 import STATUS, { calcStatusClass, statusClasses } from './status.mjs';
 import { DateTime } from '../vendor/auto/luxon.mjs';
 import {
-	msg, displayNavMessage, isPlaying, updateStatus, timeZone,
+	msg,
+	displayNavMessage,
+	isPlaying,
+	updateStatus,
+	timeZone,
 } from './navigation.mjs';
 import { parseQueryString } from './share.mjs';
 import settings from './settings.mjs';
@@ -24,7 +28,9 @@ class WeatherDisplay {
 		this.okToDrawCurrentConditions = true;
 		this.okToDrawCurrentDateTime = true;
 		this.showOnProgress = true;
+		this.includeInScreensCategory = true;
 		this.autoRefreshHandle = null;
+		this.isCanvasActive = false;
 
 		// default navigation timing
 		this.timing = {
@@ -33,7 +39,7 @@ class WeatherDisplay {
 			delay: 1, // 1*1second = 1 second total display time
 		};
 		this.navBaseCount = 0;
-		this.screenIndex = -1;	// special starting condition
+		this.screenIndex = -1; // special starting condition
 
 		// store elemId once
 		this.storeElemId(elemId);
@@ -63,12 +69,16 @@ class WeatherDisplay {
 		}
 
 		// get the saved status of the checkbox, but defer to a value set in the url
-		let savedStatus = urlState ?? window.localStorage.getItem(`display-enabled: ${this.elemId}`);
+		let savedStatus = urlState
+      ?? window.localStorage.getItem(`display-enabled: ${this.elemId}`);
 		if (savedStatus === null) savedStatus = defaultEnabled;
-		this.isEnabled = !!((savedStatus === 'true' || savedStatus === true));
+		this.isEnabled = !!(savedStatus === 'true' || savedStatus === true);
 
 		// refresh (or initially store the state of the checkbox)
-		window.localStorage.setItem(`display-enabled: ${this.elemId}`, this.isEnabled);
+		window.localStorage.setItem(
+			`display-enabled: ${this.elemId}`,
+			this.isEnabled,
+		);
 
 		// create a checkbox in the selected displays area
 		const label = document.createElement('label');
@@ -98,7 +108,10 @@ class WeatherDisplay {
 		// update the state
 		this.isEnabled = e.target.checked;
 		// store the value for the next load
-		window.localStorage.setItem(`display-enabled: ${this.elemId}`, this.isEnabled);
+		window.localStorage.setItem(
+			`display-enabled: ${this.elemId}`,
+			this.isEnabled,
+		);
 		// calling get data will update the status and actually get the data if we're set to enabled
 		this.getData();
 	}
@@ -129,6 +142,15 @@ class WeatherDisplay {
 		// only create it once
 		if (this.elemId) return;
 		this.elemId = elemId;
+	}
+
+	ensureElement() {
+		if (this.elem) return this.elem;
+		const element = document.querySelector(`#${this.elemId}-html`);
+		if (!element) return null;
+		this.elem = element;
+		if (!this.templates) this.loadTemplates();
+		return this.elem;
 	}
 
 	// get necessary data for this display
@@ -182,7 +204,10 @@ class WeatherDisplay {
 			// auto clock refresh
 			if (!this.dateTimeInterval) {
 				// only draw if canvas is active to conserve battery
-				this.dateTimeInterval = setInterval(() => this.active && this.drawCurrentDateTime(), 100);
+				this.dateTimeInterval = setInterval(
+					() => this.active && this.drawCurrentDateTime(),
+					100,
+				);
 			}
 		}
 	}
@@ -192,11 +217,15 @@ class WeatherDisplay {
 		const now = DateTime.local().setZone(timeZone());
 
 		// time = "11:35:08 PM";
-		const time = now.toLocaleString(DateTime.TIME_WITH_SECONDS).padStart(11, ' ');
+		const time = now
+			.toLocaleString(DateTime.TIME_WITH_SECONDS)
+			.padStart(11, ' ');
 		const date = now.toFormat(' ccc LLL ') + now.day.toString().padStart(2, ' ');
 
-		const dateElem = this.elem.querySelector('.date-time.date');
-		const timeElem = this.elem.querySelector('.date-time.time');
+		const element = this.ensureElement();
+		if (!element) return;
+		const dateElem = element.querySelector('.date-time.date');
+		const timeElem = element.querySelector('.date-time.time');
 
 		if (timeElem && this.lastTime !== time) {
 			timeElem.innerHTML = time.toUpperCase();
@@ -218,19 +247,30 @@ class WeatherDisplay {
 
 		this.startNavCount();
 
-		this.elem.classList.add('show');
-		document.querySelector('#divTwc').classList.add(this.elemId);
+		const element = this.ensureElement();
+		if (!element) return;
+		this.isCanvasActive = true;
+		element.classList.add('show');
+		const twcRoot = document.querySelector('#divTwc');
+		twcRoot?.classList.add(this.elemId);
 	}
 
 	hideCanvas() {
 		this.resetNavBaseCount();
-		this.elem.classList.remove('show');
+		this.isCanvasActive = false;
+		const element = this.ensureElement();
+		if (!element) return;
+		element.classList.remove('show');
 		// used to change backgrounds for widescreen
-		document.querySelector('#divTwc').classList.remove(this.elemId);
+		const twcRoot = document.querySelector('#divTwc');
+		twcRoot?.classList.remove(this.elemId);
 	}
 
 	get active() {
-		return this.elem.offsetHeight !== 0;
+		if (this.isCanvasActive) return true;
+		const element = this.ensureElement();
+		if (!element) return false;
+		return element.offsetHeight !== 0;
 	}
 
 	get enabled() {
@@ -254,9 +294,15 @@ class WeatherDisplay {
 		if (debugFlag('weatherdisplay')) {
 			const now = Date.now();
 			if (!this.timingDebug) {
-				this.timingDebug = { startTime: now, lastTransition: now, baseCountLog: [] };
+				this.timingDebug = {
+					startTime: now,
+					lastTransition: now,
+					baseCountLog: [],
+				};
 				if (this.navBaseCount !== 1) {
-					console.log(`⏱️ [${this.constructor.name}] Starting at baseCount ${this.navBaseCount}`);
+					console.log(
+						`⏱️ [${this.constructor.name}] Starting at baseCount ${this.navBaseCount}`,
+					);
 				}
 			}
 			const elapsed = now - this.timingDebug.lastTransition;
@@ -293,22 +339,48 @@ class WeatherDisplay {
 			const now = Date.now();
 			const elapsed = now - this.timingDebug.lastTransition;
 			this.timingDebug.lastTransition = now;
-			console.log(`⏱️ [${this.constructor.name}] Screen Transition: ${this.screenIndex} → ${nextScreenIndex === -1 ? 0 : nextScreenIndex}, baseCount=${this.navBaseCount}, duration=${elapsed}ms`);
-			if (this.screenIndex !== -1 && this.timing && this.timing.delay !== undefined) { // Skip expected duration calculation for the first transition (screenIndex -1 → 0)
+			console.log(
+				`⏱️ [${this.constructor.name}] Screen Transition: ${
+					this.screenIndex
+				} → ${nextScreenIndex === -1 ? 0 : nextScreenIndex}, baseCount=${
+					this.navBaseCount
+				}, duration=${elapsed}ms`,
+			);
+			if (
+				this.screenIndex !== -1
+        && this.timing
+        && this.timing.delay !== undefined
+			) {
+				// Skip expected duration calculation for the first transition (screenIndex -1 → 0)
 				let expectedMs;
-				if (Array.isArray(this.timing.delay)) { // Array-based timing (different delay per screen/period)
+				if (Array.isArray(this.timing.delay)) {
+					// Array-based timing (different delay per screen/period)
 					// Find the timing index for the screen we just LEFT (the one that just finished displaying)
 					// For transition "X → Y", we want the timing for screen X (which is this.screenIndex before it gets updated)
 					const timingIndex = this.screenIndex;
-					if (timingIndex >= 0 && timingIndex < this.timing.delay.length) { // Handle both simple number delays and object delays with time property (radar)
-						const delayValue = typeof this.timing.delay[timingIndex] === 'object' ? this.timing.delay[timingIndex].time : this.timing.delay[timingIndex];
-						expectedMs = this.timing.baseDelay * delayValue * (settings?.speed?.value || 1);
+					if (timingIndex >= 0 && timingIndex < this.timing.delay.length) {
+						// Handle both simple number delays and object delays with time property (radar)
+						const delayValue = typeof this.timing.delay[timingIndex] === 'object'
+              	? this.timing.delay[timingIndex].time
+              	: this.timing.delay[timingIndex];
+						expectedMs = this.timing.baseDelay
+              * delayValue
+              * (settings?.speed?.value || 1);
 					}
-				} else if (typeof this.timing.delay === 'number') { // Simple number-based timing (same delay for all screens)
-					expectedMs = this.timing.baseDelay * this.timing.delay * (settings?.speed?.value || 1);
+				} else if (typeof this.timing.delay === 'number') {
+					// Simple number-based timing (same delay for all screens)
+					expectedMs = this.timing.baseDelay
+            * this.timing.delay
+            * (settings?.speed?.value || 1);
 				}
 				if (expectedMs !== undefined) {
-					console.log(`⏱️ [${this.constructor.name}] Expected duration: ${expectedMs}ms, Actual: ${elapsed}ms, Diff: ${elapsed - expectedMs}ms`);
+					console.log(
+						`⏱️ [${
+							this.constructor.name
+						}] Expected duration: ${expectedMs}ms, Actual: ${elapsed}ms, Diff: ${
+							elapsed - expectedMs
+						}ms`,
+					);
 				}
 			}
 		}
@@ -354,7 +426,10 @@ class WeatherDisplay {
 		});
 
 		// generate a list of screen either sequentially if not provided in an object or from the object
-		if (Array.isArray(this.timing.delay) && typeof this.timing.delay[0] === 'object') {
+		if (
+			Array.isArray(this.timing.delay)
+      && typeof this.timing.delay[0] === 'object'
+		) {
 			// extract screen indexes from objects
 			this.timing.screenIndexes = this.timing.delay.map((delay) => delay.si);
 		} else {
@@ -371,7 +446,9 @@ class WeatherDisplay {
 			this.resetNavBaseCount();
 		} else {
 			// set the base count to the next available frame
-			const newBaseCount = this.timing.fullDelay.find((delay) => delay > this.navBaseCount);
+			const newBaseCount = this.timing.fullDelay.find(
+				(delay) => delay > this.navBaseCount,
+			);
 			this.navBaseCount = newBaseCount;
 		}
 		this.updateScreenFromBaseCount();
@@ -405,7 +482,9 @@ class WeatherDisplay {
 		if (this.timing.totalScreens === 0) return false;
 		// find the first timing in the timing array that is greater than the base count
 		if (this.timing && !this.timing.fullDelay) this.calcNavTiming();
-		const timingIndex = this.timing.fullDelay.findIndex((delay) => delay > this.navBaseCount);
+		const timingIndex = this.timing.fullDelay.findIndex(
+			(delay) => delay > this.navBaseCount,
+		);
 		if (timingIndex === -1) return false;
 		return this.timing.screenIndexes[timingIndex];
 	}
@@ -423,15 +502,33 @@ class WeatherDisplay {
 					screenIndexes: this.timing.screenIndexes,
 				});
 			}
-			this.navInterval = setInterval(() => this.navBaseTime(), this.timing.baseDelay * settings.speed.value);
+			this.navInterval = setInterval(
+				() => this.navBaseTime(),
+				this.timing.baseDelay * settings.speed.value,
+			);
 		}
 	}
 
 	resetNavBaseCount() {
-		if (debugFlag('weatherdisplay') && this.timingDebug && this.timingDebug.baseCountLog.length > 1) {
-			const totalDuration = this.timingDebug.baseCountLog[this.timingDebug.baseCountLog.length - 1].timestamp - this.timingDebug.baseCountLog[0].timestamp;
+		if (
+			debugFlag('weatherdisplay')
+      && this.timingDebug
+      && this.timingDebug.baseCountLog.length > 1
+		) {
+			const totalDuration = this.timingDebug.baseCountLog[this.timingDebug.baseCountLog.length - 1]
+        	.timestamp - this.timingDebug.baseCountLog[0].timestamp;
 			const avgInterval = totalDuration / (this.timingDebug.baseCountLog.length - 1);
-			console.log(`⏱️ [${this.constructor.name}] Total duration: ${totalDuration}ms, Avg base interval: ${avgInterval.toFixed(1)}ms, Base count range: ${this.timingDebug.baseCountLog[0].baseCount}-${this.timingDebug.baseCountLog[this.timingDebug.baseCountLog.length - 1].baseCount}`);
+			console.log(
+				`⏱️ [${
+					this.constructor.name
+				}] Total duration: ${totalDuration}ms, Avg base interval: ${avgInterval.toFixed(
+					1,
+				)}ms, Base count range: ${this.timingDebug.baseCountLog[0].baseCount}-${
+					this.timingDebug.baseCountLog[
+						this.timingDebug.baseCountLog.length - 1
+					].baseCount
+				}`,
+			);
 			this.timingDebug = null;
 		}
 
@@ -452,9 +549,11 @@ class WeatherDisplay {
 	}
 
 	loadTemplates() {
+		if (this.templates) return;
+		const element = document.querySelector(`#${this.elemId}-html`);
+		if (!element) return;
+		this.elem = element;
 		this.templates = {};
-		this.elem = document.querySelector(`#${this.elemId}-html`);
-		if (!this.elem) return;
 		elemForEach(`#${this.elemId}-html .template`, (template) => {
 			const className = template.classList[0];
 			const node = template.cloneNode(true);
@@ -508,7 +607,11 @@ class WeatherDisplay {
 	setAutoReload() {
 		// refresh time can be forced by the user (for hazards)
 		const refreshTime = this.refreshTime ?? settings.refreshTime.value;
-		this.autoRefreshHandle = this.autoRefreshHandle ?? setInterval(() => this.getData(this.weatherParameters, true), refreshTime);
+		this.autoRefreshHandle = this.autoRefreshHandle
+      ?? setInterval(
+      	() => this.getData(this.weatherParameters, true),
+      	refreshTime,
+      );
 	}
 }
 

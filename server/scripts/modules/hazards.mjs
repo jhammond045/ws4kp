@@ -58,8 +58,8 @@ class Hazards extends WeatherDisplay {
 		// auto reload must be set up specifically for hazards in case it is disabled via checkbox (for the bottom line scroll)
 		if (this.autoRefreshHandle === null) this.setAutoReload();
 
-		const alert = this.checkbox.querySelector('.alert');
-		alert.classList.remove('show');
+		const alert = this.checkbox?.querySelector?.('.alert');
+		alert?.classList.remove('show');
 
 		// if not a refresh (new site), all alerts are new
 		if (!refresh) {
@@ -70,21 +70,38 @@ class Hazards extends WeatherDisplay {
 		try {
 			// get the forecast using centralized safe handling
 			const url = new URL('https://api.weather.gov/alerts/active');
-			url.searchParams.append('point', `${this.weatherParameters.latitude},${this.weatherParameters.longitude}`);
+			url.searchParams.append(
+				'point',
+				`${this.weatherParameters.latitude},${this.weatherParameters.longitude}`,
+			);
 			url.searchParams.append('status', 'actual');
-			const alerts = await safeJson(url, { retryCount: 3, stillWaiting: () => this.stillWaiting() });
+			const alerts = await safeJson(url, {
+				retryCount: 3,
+				stillWaiting: () => this.stillWaiting(),
+			});
 
 			if (!alerts) {
 				if (debugFlag('verbose-failures')) {
-					console.warn('Active Alerts request failed; assuming no active alerts');
+					console.warn(
+						'Active Alerts request failed; assuming no active alerts',
+					);
 				}
 				this.data = [];
 			} else {
 				const allUnsortedAlerts = alerts.features ?? [];
 				const unsortedAlerts = allUnsortedAlerts.slice(0, 5);
-				const hasImmediate = unsortedAlerts.reduce((acc, hazard) => acc || hazard.properties.urgency === 'Immediate', false);
-				const sortedAlerts = unsortedAlerts.sort((a, b) => (calcSeverity(b.properties.severity, b.properties.event)) - (calcSeverity(a.properties.severity, a.properties.event)));
-				const filteredAlerts = sortedAlerts.filter((hazard) => hazard.properties.severity !== 'Unknown' && (!hasImmediate || (hazard.properties.urgency === 'Immediate')));
+				const hasImmediate = unsortedAlerts.reduce(
+					(acc, hazard) => acc || hazard.properties.urgency === 'Immediate',
+					false,
+				);
+				const sortedAlerts = unsortedAlerts.sort(
+					(a, b) => calcSeverity(b.properties.severity, b.properties.event)
+            - calcSeverity(a.properties.severity, a.properties.event),
+				);
+				const filteredAlerts = sortedAlerts.filter(
+					(hazard) => hazard.properties.severity !== 'Unknown'
+            && (!hasImmediate || hazard.properties.urgency === 'Immediate'),
+				);
 				this.data = filteredAlerts;
 			}
 
@@ -102,7 +119,7 @@ class Hazards extends WeatherDisplay {
 			}, 0);
 
 			// show alert indicator
-			if (unViewed > 0) alert.classList.add('show');
+			if (unViewed > 0) alert?.classList.add('show');
 			// draw the canvas to calculate the new timings and activate hazards in the slide deck again
 			// unless this has been disabled
 			if (this.isEnabled) {
@@ -131,7 +148,9 @@ class Hazards extends WeatherDisplay {
 		list.innerHTML = '';
 
 		// filter viewed alerts
-		const unViewed = this.data.filter((data) => !this.viewedAlerts.has(data.id));
+		const unViewed = this.data.filter(
+			(data) => !this.viewedAlerts.has(data.id),
+		);
 
 		const lines = unViewed.map((data) => {
 			const fillValues = {};
@@ -140,7 +159,9 @@ class Hazards extends WeatherDisplay {
 				.replaceAll('\n', ' ')
 				.replace(/(\S)\.\.\.(\S)/g, '$1... $2'); // Add space after ... when surrounded by non-whitespace to improve text-wrappability
 
-			fillValues['hazard-text'] = `${data.properties.event}<br/><br/>${description}<br/><br/><br/><br/>`; // Add some padding to scroll off the bottom a bit
+			fillValues[
+				'hazard-text'
+			] = `${data.properties.event}<br/><br/>${description}<br/><br/><br/><br/>`; // Add some padding to scroll off the bottom a bit
 
 			return this.fillTemplate('hazard', fillValues);
 		});
@@ -197,10 +218,16 @@ class Hazards extends WeatherDisplay {
 		if (!hazardLines) return;
 
 		// update cache if needed (when content changes or first run)
-		if (this.scrollCache.hazardLines !== hazardLines || this.scrollCache.displayHeight === 0) {
+		if (
+			this.scrollCache.hazardLines !== hazardLines
+      || this.scrollCache.displayHeight === 0
+		) {
 			this.scrollCache.displayHeight = this.elem.querySelector('.main').offsetHeight;
 			this.scrollCache.contentHeight = hazardLines.offsetHeight;
-			this.scrollCache.maxOffset = Math.max(0, this.scrollCache.contentHeight - this.scrollCache.displayHeight);
+			this.scrollCache.maxOffset = Math.max(
+				0,
+				this.scrollCache.contentHeight - this.scrollCache.displayHeight,
+			);
 			this.scrollCache.hazardLines = hazardLines;
 
 			// Set up hardware acceleration on the hazard lines element
@@ -209,7 +236,11 @@ class Hazards extends WeatherDisplay {
 		}
 
 		// calculate scroll offset and don't go past end
-		let offsetY = Math.min(this.scrollCache.maxOffset, (count - this.scrollTiming.initialCounts) * this.scrollTiming.pixelsPerCount);
+		let offsetY = Math.min(
+			this.scrollCache.maxOffset,
+			(count - this.scrollTiming.initialCounts)
+        * this.scrollTiming.pixelsPerCount,
+		);
 
 		// don't let offset go negative
 		if (offsetY < 0) offsetY = 0;

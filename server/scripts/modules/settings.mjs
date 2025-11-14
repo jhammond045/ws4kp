@@ -47,57 +47,33 @@ const kioskChange = (value) => {
 	// Conditionally store the kiosk setting based on the "Sticky Kiosk" setting
 	// (Need to check if the method exists to handle initialization race condition)
 	if (settings.kiosk?.conditionalStoreToLocalStorage) {
-		settings.kiosk.conditionalStoreToLocalStorage(value, settings.stickyKiosk?.value);
+		settings.kiosk.conditionalStoreToLocalStorage(
+			value,
+			settings.stickyKiosk?.value,
+		);
 	}
 };
 
-const scanLineChange = (value) => {
-	const container = document.getElementById('container');
-	const navIcons = document.getElementById('ToggleScanlines');
-
-	if (!container || !navIcons) {
-		// DOM not ready; defer enabling if set
-		if (value) {
-			deferredDomSettings.add('scanLines');
-		}
-		return;
-	}
-
-	if (value) {
-		container.classList.add('scanlines');
-		navIcons.classList.add('on');
-	} else {
-		// Remove all scanline classes
-		container.classList.remove('scanlines', 'scanlines-auto', 'scanlines-fine', 'scanlines-normal', 'scanlines-thick', 'scanlines-classic', 'scanlines-retro');
-		navIcons.classList.remove('on');
+const crtStrengthChange = (_value) => {
+	// Apply the CRT effect with the new strength
+	if (typeof window.applyCrtEffect === 'function') {
+		window.applyCrtEffect();
 	}
 };
 
-const scanLineModeChange = (_value) => {
-	// Only apply if scanlines are currently enabled
-	if (settings.scanLines?.value) {
-		// Call the scanline update function directly with current scale
-		if (typeof window.applyScanlineScaling === 'function') {
-			// Get current scale from navigation module or use 1.0 as fallback
-			const scale = window.currentScale || 1.0;
-			window.applyScanlineScaling(scale);
-		}
-	}
-};
-
-// Simple global helper to change scanline mode when remote debugging or in kiosk mode
-window.changeScanlineMode = (mode) => {
-	if (typeof settings === 'undefined' || !settings.scanLineMode) {
+// Simple global helper to change CRT strength when remote debugging or in kiosk mode
+window.changeCrtStrength = (strength) => {
+	if (typeof settings === 'undefined' || !settings.crtStrength) {
 		console.error('Settings system not available');
 		return false;
 	}
 
-	const validModes = ['auto', 'thin', 'medium', 'thick'];
-	if (!validModes.includes(mode)) {
+	const validStrengths = ['0', '25', '50', '75', '100'];
+	if (!validStrengths.includes(String(strength))) {
 		return false;
 	}
 
-	settings.scanLineMode.value = mode;
+	settings.crtStrength.value = String(strength);
 	return true;
 };
 
@@ -142,23 +118,18 @@ const init = () => {
 			[1.5, 'Very Slow'],
 		],
 	});
-	settings.scanLines = new Setting('scanLines', {
-		name: 'Scan Lines',
-		defaultValue: false,
-		changeAction: scanLineChange,
-		sticky: true,
-	});
-	settings.scanLineMode = new Setting('scanLineMode', {
-		name: 'Scan Line Style',
+	settings.crtStrength = new Setting('crtStrength', {
+		name: 'CRT Effect Strength',
 		type: 'select',
-		defaultValue: 'auto',
-		changeAction: scanLineModeChange,
+		defaultValue: '50',
+		changeAction: crtStrengthChange,
 		sticky: true,
 		values: [
-			['auto', 'Auto (Adaptive)'],
-			['thin', 'Thin (1x)'],
-			['medium', 'Medium (2x)'],
-			['thick', 'Thick (3x)'],
+			['0', '0%'],
+			['25', '25%'],
+			['50', '50%'],
+			['75', '75%'],
+			['100', '100%'],
 		],
 	});
 	settings.units = new Setting('units', {
@@ -192,12 +163,19 @@ init();
 document.addEventListener('DOMContentLoaded', () => {
 	// Apply any settings that were deferred due to the DOM not being ready when setting were read
 	if (deferredDomSettings.size > 0) {
-		console.log('Applying deferred DOM settings:', Array.from(deferredDomSettings));
+		console.log(
+			'Applying deferred DOM settings:',
+			Array.from(deferredDomSettings),
+		);
 
 		// Re-apply each pending setting by calling its changeAction with current value
 		deferredDomSettings.forEach((settingName) => {
 			const setting = settings[settingName];
-			if (setting && setting.changeAction && typeof setting.changeAction === 'function') {
+			if (
+				setting
+        && setting.changeAction
+        && typeof setting.changeAction === 'function'
+			) {
 				setting.changeAction(setting.value);
 			}
 		});
@@ -208,6 +186,12 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Then generate the settings UI
 	const settingHtml = Object.values(settings).map((d) => d.generate());
 	const settingsSection = document.querySelector('#settings');
+	if (!settingsSection) {
+		console.warn(
+			'Settings container not found; skipping legacy settings render.',
+		);
+		return;
+	}
 	settingsSection.innerHTML = '';
 	settingsSection.append(...settingHtml);
 });

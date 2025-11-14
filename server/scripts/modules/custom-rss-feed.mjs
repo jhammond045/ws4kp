@@ -1,5 +1,8 @@
 import Setting from './utils/setting.mjs';
-import { reset as resetScroll, addScreen as addScroll } from './currentweatherscroll.mjs';
+import {
+	reset as resetScroll,
+	addScreen as addScroll,
+} from './currentweatherscroll.mjs';
 import { json } from './utils/fetch.mjs';
 
 let firstRun = true;
@@ -45,11 +48,10 @@ const parseFeed = (textInput) => {
 	// add single text scroll
 	resetScroll();
 	addScroll(
-		() => (
-			{
-				type: 'scroll',
-				text: textInput,
-			}),
+		() => ({
+			type: 'scroll',
+			text: textInput,
+		}),
 		// keep the existing scroll
 		true,
 	);
@@ -68,7 +70,9 @@ const getFeed = async (url) => {
 	const isBase64 = rssResponse.status.content_type.substring(0, 8) !== 'text/xml';
 
 	// base 64 decode everything after the comma
-	const rss = isBase64 ? atob(rssResponse.contents.split('base64,')[1]) : rssResponse.contents;
+	const rss = isBase64
+		? atob(rssResponse.contents.split('base64,')[1])
+		: rssResponse.contents;
 
 	// parse the rss
 	const doc = parser.parseFromString(rss, 'text/xml');
@@ -77,7 +81,9 @@ const getFeed = async (url) => {
 	const rssTitle = doc.querySelector('channel title').textContent;
 
 	// get each item
-	const titles = [...doc.querySelectorAll('item title')].map((t) => t.textContent);
+	const titles = [...doc.querySelectorAll('item title')].map(
+		(t) => t.textContent,
+	);
 
 	// reset the scroll, then add the screens
 	resetScroll();
@@ -123,6 +129,11 @@ const customFeedEnable = new Setting('customFeedEnable', {
 document.addEventListener('DOMContentLoaded', () => {
 	// add the controls to the page
 	const settingsSection = document.querySelector('#settings');
+	if (!settingsSection) {
+		console.warn('Settings container not found; skipping custom RSS feed UI.');
+		firstRun = false;
+		return;
+	}
 	settingsSection.append(customFeedEnable.generate(), customFeed.generate());
 	// clear the first run value
 	firstRun = false;

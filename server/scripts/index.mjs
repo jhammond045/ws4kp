@@ -1,7 +1,14 @@
 import { json } from './modules/utils/fetch.mjs';
 import noSleep from './modules/utils/nosleep.mjs';
 import {
-	message as navMessage, isPlaying, resize, resetStatuses, latLonReceived, isIOS,
+	message as navMessage,
+	isPlaying,
+	resize,
+	resetStatuses,
+	hideAllCanvases,
+	latLonReceived,
+	isIOS,
+	getDisplays,
 } from './modules/navigation.mjs';
 import { round2 } from './modules/utils/units.mjs';
 import { parseQueryString } from './modules/share.mjs';
@@ -9,6 +16,18 @@ import settings from './modules/settings.mjs';
 import AutoComplete from './modules/autocomplete.mjs';
 import { loadAllData } from './modules/utils/data-loader.mjs';
 import { debugFlag } from './modules/utils/debug.mjs';
+import './modules/video/index.mjs';
+import { openVideoManager } from './modules/video/manager.mjs';
+import { toggleMedia, mediaPlaying, mediaVolume } from './modules/media.mjs';
+import {
+	getVideoSources,
+	encodeSourceForPermalink,
+	getIncludeVideosInPermalink,
+	subscribeVideoSources,
+	setIncludeVideosInPermalink,
+} from './modules/video/sources.mjs';
+import createOsdMenu from './modules/osd/osdMenu.mjs';
+import { openOsdModal } from './modules/osd/osdModal.mjs';
 
 document.addEventListener('DOMContentLoaded', () => {
 	init();
@@ -17,23 +36,468 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const categories = [
 	'Land Features',
-	'Bay', 'Channel', 'Cove', 'Dam', 'Delta', 'Gulf', 'Lagoon', 'Lake', 'Ocean', 'Reef', 'Reservoir', 'Sea', 'Sound', 'Strait', 'Waterfall', 'Wharf', // Water Features
-	'Amusement Park', 'Historical Monument', 'Landmark', 'Tourist Attraction', 'Zoo', // POI/Arts and Entertainment
+	'Bay',
+	'Channel',
+	'Cove',
+	'Dam',
+	'Delta',
+	'Gulf',
+	'Lagoon',
+	'Lake',
+	'Ocean',
+	'Reef',
+	'Reservoir',
+	'Sea',
+	'Sound',
+	'Strait',
+	'Waterfall',
+	'Wharf', // Water Features
+	'Amusement Park',
+	'Historical Monument',
+	'Landmark',
+	'Tourist Attraction',
+	'Zoo', // POI/Arts and Entertainment
 	'College', // POI/Education
-	'Beach', 'Campground', 'Golf Course', 'Harbor', 'Nature Reserve', 'Other Parks and Outdoors', 'Park', 'Racetrack',
-	'Scenic Overlook', 'Ski Resort', 'Sports Center', 'Sports Field', 'Wildlife Reserve', // POI/Parks and Outdoors
-	'Airport', 'Ferry', 'Marina', 'Pier', 'Port', 'Resort', // POI/Travel
-	'Postal', 'Populated Place',
+	'Beach',
+	'Campground',
+	'Golf Course',
+	'Harbor',
+	'Nature Reserve',
+	'Other Parks and Outdoors',
+	'Park',
+	'Racetrack',
+	'Scenic Overlook',
+	'Ski Resort',
+	'Sports Center',
+	'Sports Field',
+	'Wildlife Reserve', // POI/Parks and Outdoors
+	'Airport',
+	'Ferry',
+	'Marina',
+	'Pier',
+	'Port',
+	'Resort', // POI/Travel
+	'Postal',
+	'Populated Place',
 ];
 const category = categories.join(',');
 const TXT_ADDRESS_SELECTOR = '#txtLocation';
 const TOGGLE_FULL_SCREEN_SELECTOR = '#ToggleFullScreen';
 const BNT_GET_GPS_SELECTOR = '#btnGetGps';
 
+let osdMenuController = null;
+
+const postMessage = (type, myMessage = {}) => {
+	navMessage({ type, message: myMessage });
+};
+
+const attemptCopyToClipboard = async (text) => {
+	if (!navigator?.clipboard?.writeText) {
+		return { success: false, supported: false };
+	}
+	try {
+		await navigator.clipboard.writeText(text);
+		return { success: true, supported: true };
+	} catch (error) {
+		console.warn('Unable to copy permalink to clipboard', error);
+		return { success: false, supported: true };
+	}
+};
+
+const buildPermalinkUrl = () => {
+	const params = new URLSearchParams();
+	const addParam = (key, rawValue) => {
+		if (rawValue === undefined || rawValue === null) return;
+		let value = rawValue;
+		if (typeof value === 'boolean') {
+			value = value ? 'true' : 'false';
+		}
+		params.set(key, String(value));
+	};
+
+	Object.values(settings).forEach((setting) => {
+		if (!setting || typeof setting !== 'object') return;
+		if (!('shortName' in setting) || !('type' in setting)) return;
+		const key = `settings-${setting.shortName}-${setting.type}`;
+		switch (setting.type) {
+			case 'checkbox':
+			case 'boolean':
+				addParam(key, !!setting.value);
+				break;
+			case 'select':
+				addParam(key, setting.value);
+				break;
+			case 'string':
+				addParam(key, setting.value ?? '');
+				break;
+			default:
+		}
+	});
+
+	getDisplays().forEach((display) => {
+		if (!display || !display.elemId) return;
+		addParam(`${display.elemId}-checkbox`, !!display.isEnabled);
+	});
+
+	const latLonQuery = localStorage.getItem('latLonQuery');
+	if (latLonQuery) params.set('latLonQuery', latLonQuery);
+	const latLon = localStorage.getItem('latLon');
+	if (latLon) params.set('latLon', latLon);
+
+	if (getIncludeVideosInPermalink()) {
+		getVideoSources()
+			.filter((source) => source?.url)
+			.forEach((source) => params.append('video', encodeSourceForPermalink(source)));
+	}
+
+	const url = new URL(window.location.href);
+	url.search = params.toString();
+	return url.toString();
+};
+
+const openPermalinkModal = async () => {
+	const url = buildPermalinkUrl();
+	const container = document.createElement('div');
+	container.className = 'ws-osd-modal__permalink';
+
+	const instructions = document.createElement('p');
+	instructions.textContent = 'Copy this link to share your WeatherStar setup:';
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.value = url;
+	input.readOnly = true;
+	input.className = 'ws-osd-modal__permalink-input';
+
+	const status = document.createElement('p');
+	status.className = 'ws-osd-modal__permalink-status';
+
+	container.append(instructions, input, status);
+
+	const copyResult = await attemptCopyToClipboard(url);
+	status.textContent = copyResult.success
+		? 'Copied to clipboard.'
+		: 'Copy failed — highlight the link and copy manually.';
+
+	const modalPromise = openOsdModal({
+		title: '--------- PERMALINK ---------',
+		body: container,
+		actions: [{ id: 'ok', label: '[ OK ]', primary: true }],
+		autofocus: 'ok',
+	});
+
+	requestAnimationFrame(() => {
+		input.focus();
+		input.select();
+	});
+
+	return modalPromise;
+};
+
+const buildAboutBody = () => {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'ws-osd-modal__about';
+
+	const versionText = document.getElementById('version')?.textContent?.trim?.() ?? '';
+	const versionParagraph = document.createElement('p');
+	versionParagraph.textContent = versionText
+		? `WeatherStar 4000+ v${versionText}`
+		: 'WeatherStar 4000+';
+	const creditsParagraph = document.createElement('p');
+	creditsParagraph.textContent = 'A fan-made tribute to The Weather Channel’s WeatherStar 4000 experience.';
+	const linkParagraph = document.createElement('p');
+	const repoLink = document.createElement('a');
+	repoLink.href = 'https://github.com/netbymatt/ws4kp';
+	repoLink.target = '_blank';
+	repoLink.rel = 'noopener noreferrer';
+	repoLink.textContent = 'GitHub Repository';
+	linkParagraph.append('Source code and credits: ', repoLink);
+
+	wrapper.append(versionParagraph, creditsParagraph, linkParagraph);
+	return wrapper;
+};
+
+const openAboutModal = () => openOsdModal({
+	title: '--------- ABOUT ---------',
+	body: buildAboutBody(),
+	actions: [{ id: 'ok', label: '[ OK ]', primary: true }],
+	autofocus: 'ok',
+});
+
+const resetAllSettings = () => {
+	Object.values(settings).forEach((setting) => {
+		if (!setting || typeof setting !== 'object') return;
+		if (!('defaultValue' in setting) || !('shortName' in setting)) return;
+		setting.value = setting.defaultValue;
+	});
+
+	getDisplays().forEach((display) => {
+		if (!display) return;
+		const shouldEnable = display.defaultEnabled !== undefined ? display.defaultEnabled : true;
+		if (typeof display.checkboxChange === 'function') {
+			display.checkboxChange({ target: { checked: shouldEnable } });
+		} else {
+			display.isEnabled = shouldEnable;
+			if (shouldEnable) display.getData?.();
+		}
+		localStorage.removeItem(`display-enabled: ${display.elemId}`);
+	});
+
+	localStorage.removeItem('latLonQuery');
+	localStorage.removeItem('latLon');
+	localStorage.removeItem('latLonFromGPS');
+	localStorage.removeItem('play');
+
+	btnNavigateRefreshClick();
+	osdMenuController?.refresh();
+};
+
+const confirmResetDefaults = async () => {
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__confirm';
+	const message = document.createElement('p');
+	message.textContent = 'Reset all settings, displays, and location to their defaults?';
+	body.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- CONFIRM ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'reset', label: '[ RESET ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	if (result?.action !== 'reset') return;
+
+	resetAllSettings();
+
+	await openOsdModal({
+		title: '--------- RESET ---------',
+		body: 'Settings restored to defaults.',
+		actions: [{ id: 'ok', label: '[ OK ]', primary: true }],
+		autofocus: 'ok',
+	});
+};
+
+const requestKioskEnable = async () => {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'ws-osd-modal__kiosk';
+	const message = document.createElement('p');
+	message.textContent = 'Kiosk Mode hides browser controls and auto-plays content. Press ENABLE to proceed.';
+	wrapper.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- KIOSK MODE ---------',
+		body: wrapper,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'enable', label: '[ ENABLE ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	if (result?.action !== 'enable') return false;
+
+	settings.kiosk.value = true;
+	return true;
+};
+
+const openLocationModal = async () => {
+	const queryContainer = document.getElementById('divQuery');
+	if (!queryContainer) return;
+
+	const placeholder = document.createElement('div');
+	placeholder.id = 'ws-osd-location-placeholder';
+	const { parentElement: originalParent, nextSibling } = queryContainer;
+
+	if (originalParent) {
+		originalParent.insertBefore(placeholder, nextSibling);
+	}
+
+	// Restructure for grid layout
+	const input = queryContainer.querySelector(TXT_ADDRESS_SELECTOR);
+	const buttonsContainer = queryContainer.querySelector('.buttons');
+
+	// Create input wrapper
+	const inputWrap = document.createElement('div');
+	inputWrap.className = 'input-wrap';
+	if (input) {
+		inputWrap.appendChild(input);
+	}
+
+	// Clear and rebuild queryContainer
+	queryContainer.innerHTML = '';
+	if (inputWrap.firstChild) {
+		queryContainer.appendChild(inputWrap);
+	}
+	if (buttonsContainer) {
+		queryContainer.appendChild(buttonsContainer);
+	}
+
+	queryContainer.classList.add('ws-osd-location__content');
+
+	const wrapper = document.createElement('div');
+	wrapper.className = 'ws-osd-location';
+
+	// Add informative text
+	const instructions = document.createElement('div');
+	instructions.className = 'ws-osd-location__instructions';
+	instructions.textContent = 'Enter your ZIP code or city and state';
+
+	wrapper.append(instructions, queryContainer);
+
+	const result = openOsdModal({
+		title: '--------- LOCATION ---------',
+		body: wrapper,
+		actions: [{ id: 'close', label: '[ CLOSE ]', primary: true }],
+		autofocus: 'close',
+	});
+
+	if (input) {
+		requestAnimationFrame(() => {
+			input.focus();
+			input.select();
+		});
+	}
+
+	await result;
+
+	// Restore original structure
+	queryContainer.classList.remove('ws-osd-location__content');
+
+	// Move input back to queryContainer root
+	const restoreInputWrap = queryContainer.querySelector('.input-wrap');
+	if (restoreInputWrap && input) {
+		queryContainer.insertBefore(input, restoreInputWrap);
+		restoreInputWrap.remove();
+	}
+
+	if (placeholder.parentElement) {
+		placeholder.parentElement.insertBefore(queryContainer, placeholder);
+		placeholder.remove();
+	} else if (originalParent) {
+		originalParent.insertBefore(queryContainer, nextSibling);
+	}
+};
+
+const resolveUnitsLabel = (value) => {
+	const entry = (settings.units?.values ?? []).find(([v]) => v === value);
+	if (entry) return entry[1]?.toUpperCase?.() ?? String(entry[1] ?? value).toUpperCase();
+	return String(value).toUpperCase();
+};
+
+const confirmUnitsChange = async (currentValue, nextValue) => {
+	if (currentValue === nextValue) return true;
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__confirm';
+	const message = document.createElement('p');
+	message.textContent = `Switch units to ${resolveUnitsLabel(nextValue)}?`;
+	body.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- CONFIRM ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'confirm', label: '[ SWITCH ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	return result?.action === 'confirm';
+};
+
+const confirmIncludeVideosToggle = async ({ nextValue, count }) => {
+	if (nextValue || !count) return true;
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__confirm';
+	const message = document.createElement('p');
+	message.textContent = 'Exclude videos from permalinks? Recipients will not see configured videos.';
+	body.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- CONFIRM ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'exclude', label: '[ EXCLUDE ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	return result?.action === 'exclude';
+};
+
+const setupOsdMenu = () => {
+	if (osdMenuController) return;
+	try {
+		osdMenuController = createOsdMenu({
+			settings,
+			getDisplays,
+			media: {
+				isAvailable: () => document
+					.getElementById('ToggleMedia')
+					?.classList.contains('available') ?? false,
+				getPlaying: () => !!mediaPlaying.value,
+				setPlaying: (value) => toggleMedia(Boolean(value)),
+				getVolume: () => mediaVolume.value,
+				setVolume: (value) => {
+					mediaVolume.value = Number(value);
+				},
+				getVolumeOptions: () => (mediaVolume.values || []).map(([value, label]) => ({
+					value,
+					label,
+				})),
+			},
+			video: {
+				getSources: () => getVideoSources(),
+				getIncludeInPermalink: () => getIncludeVideosInPermalink(),
+				setIncludeInPermalink: (value) => {
+					setIncludeVideosInPermalink(Boolean(value));
+					return getIncludeVideosInPermalink();
+				},
+				subscribe: (listener) => subscribeVideoSources(listener),
+				openManager: openVideoManager,
+			},
+			actions: {
+				openLocation: openLocationModal,
+				openVideoManager,
+				openPermalinkModal,
+				confirmResetDefaults,
+				openAboutModal,
+				requestKioskEnable,
+				confirmUnitsChange,
+				confirmIncludeVideosToggle,
+			},
+			navigation: {
+				isPlaying,
+				sendCommand: (command) => postMessage('navButton', command),
+			},
+		});
+	} catch (error) {
+		console.error('Failed to initialize OSD menu', error);
+	}
+};
+
+const toggleOsdMenu = () => {
+	setupOsdMenu();
+	if (!osdMenuController) return;
+	if (osdMenuController.isOpen?.()) {
+		osdMenuController.close();
+	} else {
+		osdMenuController.open();
+	}
+};
+
 const init = async () => {
 	// Load core data first - app cannot function without it
 	try {
-		await loadAllData(typeof OVERRIDES !== 'undefined' && OVERRIDES.VERSION ? OVERRIDES.VERSION : '');
+		await loadAllData(
+			typeof OVERRIDES !== 'undefined' && OVERRIDES.VERSION
+				? OVERRIDES.VERSION
+				: '',
+		);
 	} catch (error) {
 		console.error('Failed to load core application data:', error);
 		// Show error message to user and halt initialization
@@ -47,16 +511,27 @@ const init = async () => {
 		return; // Stop initialization
 	}
 
-	document.querySelector(TXT_ADDRESS_SELECTOR).addEventListener('focus', (e) => {
-		e.target.select();
-	});
+	document
+		.querySelector(TXT_ADDRESS_SELECTOR)
+		.addEventListener('focus', (e) => {
+			e.target.select();
+		});
 
-	document.querySelector('#NavigateMenu').addEventListener('click', btnNavigateMenuClick);
-	document.querySelector('#NavigateRefresh').addEventListener('click', btnNavigateRefreshClick);
-	document.querySelector('#NavigateNext').addEventListener('click', btnNavigateNextClick);
-	document.querySelector('#NavigatePrevious').addEventListener('click', btnNavigatePreviousClick);
-	document.querySelector('#NavigatePlay').addEventListener('click', btnNavigatePlayClick);
-	document.querySelector('#ToggleScanlines').addEventListener('click', btnNavigateToggleScanlines);
+	document
+		.querySelector('#NavigateSetup')
+		?.addEventListener('click', btnNavigateSetupClick);
+	document
+		.querySelector('#NavigateRefresh')
+		.addEventListener('click', btnNavigateRefreshClick);
+	document
+		.querySelector('#NavigateNext')
+		.addEventListener('click', btnNavigateNextClick);
+	document
+		.querySelector('#NavigatePrevious')
+		.addEventListener('click', btnNavigatePreviousClick);
+	document
+		.querySelector('#NavigatePlay')
+		.addEventListener('click', btnNavigatePlayClick);
 
 	// Hide fullscreen button on iOS since it doesn't support true fullscreen
 	const fullscreenButton = document.querySelector(TOGGLE_FULL_SCREEN_SELECTOR);
@@ -74,34 +549,45 @@ const init = async () => {
 		if (document.fullscreenElement) updateFullScreenNavigate();
 	});
 
-	document.querySelector('#btnGetLatLng').addEventListener('click', () => autoComplete.directFormSubmit());
+	document
+		.querySelector('#btnGetLatLng')
+		.addEventListener('click', () => autoComplete.directFormSubmit());
 
 	document.addEventListener('keydown', documentKeydown);
-	document.addEventListener('touchmove', (e) => { if (document.fullscreenElement) e.preventDefault(); });
-
-	const autoComplete = new AutoComplete(document.querySelector(TXT_ADDRESS_SELECTOR), {
-		serviceUrl: 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/suggest',
-		deferRequestBy: 300,
-		paramName: 'text',
-		params: {
-			f: 'json',
-			countryCode: 'USA',
-			category,
-			maxSuggestions: 10,
-		},
-		dataType: 'json',
-		transformResult: (response) => ({
-			suggestions: response.suggestions.map((i) => ({
-				value: i.text,
-				data: i.magicKey,
-			})),
-		}),
-		minChars: 3,
-		showNoSuggestionNotice: true,
-		noSuggestionNotice: 'No results found. Please try a different search string.',
-		onSelect(suggestion) { autocompleteOnSelect(suggestion); },
-		width: 490,
+	document.addEventListener('touchmove', (e) => {
+		if (document.fullscreenElement) e.preventDefault();
 	});
+
+	const autoComplete = new AutoComplete(
+		document.querySelector(TXT_ADDRESS_SELECTOR),
+		{
+			serviceUrl:
+        'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/suggest',
+			deferRequestBy: 300,
+			paramName: 'text',
+			params: {
+				f: 'json',
+				countryCode: 'USA',
+				category,
+				maxSuggestions: 10,
+			},
+			dataType: 'json',
+			transformResult: (response) => ({
+				suggestions: response.suggestions.map((i) => ({
+					value: i.text,
+					data: i.magicKey,
+				})),
+			}),
+			minChars: 3,
+			showNoSuggestionNotice: true,
+			noSuggestionNotice:
+        'No results found. Please try a different search string.',
+			onSelect(suggestion) {
+				autocompleteOnSelect(suggestion);
+			},
+			width: 490,
+		},
+	);
 	window.autoComplete = autoComplete;
 
 	// attempt to parse the url parameters
@@ -136,7 +622,9 @@ const init = async () => {
 	}
 
 	// Auto-play logic: also play immediately if kiosk mode is enabled
-	const play = settings.kiosk.value || urlKioskCheckbox === 'true' ? 'true' : localStorage.getItem('play');
+	const play = settings.kiosk.value || urlKioskCheckbox === 'true'
+    	? 'true'
+    	: localStorage.getItem('play');
 	if (play === null || play === 'true') postMessage('navButton', 'play');
 
 	document.querySelector('#btnClearQuery').addEventListener('click', () => {
@@ -158,19 +646,28 @@ const init = async () => {
 	});
 
 	// swipe functionality
-	document.querySelector('#container').addEventListener('swiped-left', () => swipeCallBack('left'));
-	document.querySelector('#container').addEventListener('swiped-right', () => swipeCallBack('right'));
+	document
+		.querySelector('#container')
+		.addEventListener('swiped-left', () => swipeCallBack('left'));
+	document
+		.querySelector('#container')
+		.addEventListener('swiped-right', () => swipeCallBack('right'));
+
+	setupOsdMenu();
 };
 
 const autocompleteOnSelect = async (suggestion) => {
 	// Note: it's fine that this uses json instead of safeJson since it's infrequent and user-initiated
-	const data = await json('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/find', {
-		data: {
-			text: suggestion.value,
-			magicKey: suggestion.data,
-			f: 'json',
+	const data = await json(
+		'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/find',
+		{
+			data: {
+				text: suggestion.value,
+				magicKey: suggestion.data,
+				f: 'json',
+			},
 		},
-	});
+	);
 
 	const loc = data.locations[0];
 	if (loc) {
@@ -178,14 +675,19 @@ const autocompleteOnSelect = async (suggestion) => {
 		document.querySelector(BNT_GET_GPS_SELECTOR).classList.remove('active');
 		doRedirectToGeometry(loc.feature.geometry);
 	} else {
-		console.error('An unexpected error occurred. Please try a different search string.');
+		console.error(
+			'An unexpected error occurred. Please try a different search string.',
+		);
 	}
 };
 
 const doRedirectToGeometry = (geom, haveDataCallback) => {
 	const latLon = { lat: round2(geom.y, 4), lon: round2(geom.x, 4) };
 	// Save the query
-	localStorage.setItem('latLonQuery', document.querySelector(TXT_ADDRESS_SELECTOR).value);
+	localStorage.setItem(
+		'latLonQuery',
+		document.querySelector(TXT_ADDRESS_SELECTOR).value,
+	);
 	localStorage.setItem('latLon', JSON.stringify(latLon));
 
 	// get the data
@@ -215,7 +717,10 @@ const enterFullScreen = async () => {
 	const element = document.querySelector('#divTwc');
 
 	// Supports most browsers and their versions.
-	const requestMethod = element.requestFullscreen || element.webkitRequestFullscreen || element.mozRequestFullscreen || element.msRequestFullscreen;
+	const requestMethod = element.requestFullscreen
+    || element.webkitRequestFullscreen
+    || element.mozRequestFullscreen
+    || element.msRequestFullscreen;
 
 	if (requestMethod) {
 		try {
@@ -227,7 +732,11 @@ const enterFullScreen = async () => {
 
 			if (debugFlag('fullscreen')) {
 				setTimeout(() => {
-					console.log(`🖥️ Fullscreen engaged. window=${window.innerWidth}x${window.innerHeight} fullscreenElement=${!!document.fullscreenElement}`);
+					console.log(
+						`🖥️ Fullscreen engaged. window=${window.innerWidth}x${
+							window.innerHeight
+						} fullscreenElement=${!!document.fullscreenElement}`,
+					);
 				}, 150);
 			}
 		} catch (error) {
@@ -278,8 +787,8 @@ const exitFullScreenVisibilityChanges = () => {
 	divTwcBottom.classList.add('visible');
 };
 
-const btnNavigateMenuClick = () => {
-	postMessage('navButton', 'menu');
+const btnNavigateSetupClick = () => {
+	toggleOsdMenu();
 	return false;
 };
 
@@ -310,6 +819,19 @@ const swipeCallBack = (direction) => {
 
 const btnNavigateRefreshClick = () => {
 	resetStatuses();
+	hideAllCanvases();
+	if (!settings?.kiosk?.value) {
+		const loading = document.querySelector('#loading');
+		if (loading) loading.style.display = 'none';
+		const displays = getDisplays();
+		const progressDisplay = displays.find(
+			(display) => display?.elemId === 'progress',
+		);
+		if (progressDisplay) {
+			progressDisplay.showCanvas();
+			progressDisplay.drawCanvas(displays, 0);
+		}
+	}
 	loadData();
 
 	return false;
@@ -352,6 +874,9 @@ const updateFullScreenNavigate = () => {
 
 const documentKeydown = (e) => {
 	const { key } = e;
+	if (osdMenuController?.isOpen?.()) {
+		return false;
+	}
 
 	// Handle Ctrl+K to exit kiosk mode (even when other modifiers would normally be ignored)
 	if (e.ctrlKey && (key === 'k' || key === 'K')) {
@@ -389,7 +914,7 @@ const documentKeydown = (e) => {
 
 			case 'ArrowUp': // Home
 				e.preventDefault();
-				btnNavigateMenuClick();
+				btnNavigateSetupClick();
 				return false;
 
 			case '0': // "O" Restart
@@ -413,16 +938,7 @@ const btnNavigatePlayClick = () => {
 	return false;
 };
 
-const btnNavigateToggleScanlines = () => {
-	settings.scanLines.value = !settings.scanLines.value;
-	return false;
-};
-
 // post a message to the iframe
-const postMessage = (type, myMessage = {}) => {
-	navMessage({ type, message: myMessage });
-};
-
 const getPosition = async () => new Promise((resolve) => {
 	navigator.geolocation.getCurrentPosition(resolve);
 });
@@ -456,7 +972,10 @@ const getForecastFromLatLon = (latitude, longitude, fromGps = false) => {
 		const location = point.properties.relativeLocation.properties;
 		// Save the query
 		const query = `${location.city}, ${location.state}`;
-		localStorage.setItem('latLon', JSON.stringify({ lat: latitude, lon: longitude }));
+		localStorage.setItem(
+			'latLon',
+			JSON.stringify({ lat: latitude, lon: longitude }),
+		);
 		localStorage.setItem('latLonQuery', query);
 		localStorage.setItem('latLonFromGPS', fromGps);
 		txtAddress.value = `${location.city}, ${location.state}`;

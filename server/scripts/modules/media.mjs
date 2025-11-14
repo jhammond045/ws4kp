@@ -47,7 +47,10 @@ const getMedia = async () => {
 		if (response.ok) {
 			playlist = await response.json();
 			playlistSource = 'from server';
-		} else if (response.status === 404 && response.headers.get('X-Weatherstar') === 'true') {
+		} else if (
+			response.status === 404
+      && response.headers.get('X-Weatherstar') === 'true'
+		) {
 			// Expected behavior in static deployment mode
 			playlist = await scanMusicDirectory();
 			playlistSource = 'via directory scan (static deployment)';
@@ -63,7 +66,11 @@ const getMedia = async () => {
 
 	const fileCount = playlist?.availableFiles?.length || 0;
 	if (fileCount > 0) {
-		console.log(`Loaded playlist ${playlistSource} - found ${fileCount} music file${fileCount === 1 ? '' : 's'}`);
+		console.log(
+			`Loaded playlist ${playlistSource} - found ${fileCount} music file${
+				fileCount === 1 ? '' : 's'
+			}`,
+		);
 	} else {
 		console.log(`No music files found ${playlistSource}`);
 	}
@@ -85,9 +92,25 @@ const enableMediaPlayer = () => {
 		if (mediaPlaying.value === true) {
 			startMedia();
 		}
-		// add the volume control to the page
+		// add the volume control to the page if legacy settings container exists
 		const settingsSection = document.querySelector('#settings');
-		settingsSection.append(mediaVolume.generate());
+		if (settingsSection) {
+			settingsSection.append(mediaVolume.generate());
+		} else {
+			console.warn(
+				'Settings container not found; media volume control not rendered in legacy panel.',
+			);
+		}
+
+		try {
+			document.dispatchEvent(
+				new CustomEvent('ws4kp:media-availability', {
+					detail: { available: true },
+				}),
+			);
+		} catch (error) {
+			console.error('Failed to dispatch media availability event', error);
+		}
 	}
 };
 
@@ -123,7 +146,7 @@ const startMedia = async () => {
 			setTrackName(playlist.availableFiles[currentTrack]);
 		} catch (e) {
 			// report the error
-			console.error('Couldn\'t play music');
+			console.error("Couldn't play music");
 			console.error(e);
 			// set state back to not playing for good UI experience
 			mediaPlaying.value = false;
@@ -177,7 +200,7 @@ const mediaVolume = new Setting('mediaVolume', {
 	values: [
 		[1, '100%'],
 		[0.75, '75%'],
-		[0.50, '50%'],
+		[0.5, '50%'],
 		[0.25, '25%'],
 	],
 	changeAction: setVolume,
@@ -229,14 +252,15 @@ const playerEnded = () => {
 };
 
 const setTrackName = (fileName) => {
-	const baseName = fileName.split('/').pop();
+	const trackElement = document.getElementById('musicTrack');
+	if (!trackElement) return;
+	const baseName = String(fileName ?? '')
+		.split('/')
+		.pop();
 	const trackName = decodeURIComponent(
 		baseName.replace(/\.mp3/gi, '').replace(/(_-)/gi, ''),
 	);
-	document.getElementById('musicTrack').innerHTML = trackName;
+	trackElement.innerHTML = trackName;
 };
 
-export {
-	// eslint-disable-next-line import/prefer-default-export
-	toggleMedia,
-};
+export { toggleMedia, mediaPlaying, mediaVolume };

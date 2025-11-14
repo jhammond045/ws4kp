@@ -167,6 +167,7 @@ if (process.env?.DIST === '1') {
 	app.get('/index.html', index);
 	app.use('/geoip', geoip);
 	app.use('/resources', express.static('./server/scripts/modules'));
+	app.use('/src', express.static('./src', staticOptions));
 	app.get('/', index);
 	app.get('*name', express.static('./server', staticOptions));
 }

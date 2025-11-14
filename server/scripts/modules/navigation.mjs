@@ -12,6 +12,55 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const displays = [];
+
+const resolveDisplayEnabledState = (display) => {
+	if (!display || !display.elemId) return;
+	const storageKey = `display-enabled: ${display.elemId}`;
+	let resolved;
+	try {
+		if (typeof window !== 'undefined' && window.localStorage) {
+			const stored = window.localStorage.getItem(storageKey);
+			if (stored !== null) {
+				resolved = stored === 'true';
+			}
+		}
+	} catch (_error) {
+		// ignore storage access errors
+	}
+
+	if (resolved === undefined) {
+		if (typeof display.isEnabled === 'boolean') {
+			resolved = display.isEnabled;
+		} else if (display.defaultEnabled !== undefined) {
+			resolved = !!display.defaultEnabled;
+		} else {
+			resolved = true;
+		}
+	}
+
+	display.isEnabled = resolved;
+
+	try {
+		if (typeof window !== 'undefined' && window.localStorage) {
+			window.localStorage.setItem(storageKey, resolved);
+		}
+	} catch (_error) {
+		// ignore storage write failures
+	}
+
+	if (typeof display.setStatus === 'function') {
+		const targetStatus = resolved ? STATUS.loading : STATUS.disabled;
+		if (display.status !== targetStatus) {
+			display.setStatus(targetStatus);
+		}
+	}
+};
+
+const trimDisplayTail = () => {
+	while (displays.length > 0 && !displays[displays.length - 1]) {
+		displays.pop();
+	}
+};
 let playing = false;
 let progress;
 const weatherParameters = {};
@@ -21,11 +70,18 @@ const init = async () => {
 	let resizeTimeout;
 
 	// Handle fullscreen change events and trigger an immediate resize calculation
-	const fullscreenEvents = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+	const fullscreenEvents = [
+		'fullscreenchange',
+		'webkitfullscreenchange',
+		'mozfullscreenchange',
+		'MSFullscreenChange',
+	];
 	fullscreenEvents.forEach((eventName) => {
 		document.addEventListener(eventName, () => {
 			if (debugFlag('fullscreen')) {
-				console.log(`🖥️ ${eventName} event fired. fullscreenElement=${!!document.fullscreenElement}`);
+				console.log(
+					`🖥️ ${eventName} event fired. fullscreenElement=${!!document.fullscreenElement}`,
+				);
 			}
 			resize(true);
 		});
@@ -40,7 +96,9 @@ const init = async () => {
 	// Handle orientation changes (Mobile Safari doesn't always fire resize events on orientation change)
 	window.addEventListener('orientationchange', () => {
 		if (debugFlag('resize')) {
-			console.log('📱 Orientation change detected, forcing resize after short delay');
+			console.log(
+				'📱 Orientation change detected, forcing resize after short delay',
+			);
 		}
 		clearTimeout(resizeTimeout);
 		// Use a slightly longer delay for orientation changes to allow the browser to settle
@@ -129,7 +187,7 @@ const getWeather = async (latLon, haveDataCallback) => {
 		}
 
 		// call for new data on each display
-		displays.forEach((display) => display.getData(weatherParameters));
+		displays.forEach((display) => display?.getData?.(weatherParameters));
 	} catch (error) {
 		console.error(`Failed to get weather data: ${error.message}`);
 	}
@@ -140,29 +198,46 @@ const updateStatus = (value) => {
 	if (value.id < 0) return;
 	if (!progress && !settings?.kiosk?.value) return;
 
-	if (progress) progress.drawCanvas(displays, countLoadedDisplays());
+	if (progress) progress.drawCanvas(getDisplays(), countLoadedDisplays());
 
 	// first display is hazards and it must load before evaluating the first display
 	if (!displays[0] || displays[0].status === STATUS.loading) return;
 
 	// calculate first enabled display
-	const firstDisplayIndex = displays.findIndex((display) => display?.enabled && display?.timing?.totalScreens > 0);
+	const firstDisplayIndex = displays.findIndex(
+		(display) => display?.enabled && display?.timing?.totalScreens > 0,
+	);
+	const firstDisplay = firstDisplayIndex >= 0 ? displays[firstDisplayIndex] : undefined;
+	if (!firstDisplay) return;
 
 	// value.id = 0 is hazards, if they fail to load hot-wire a new value.id to the current display to see if it needs to be loaded
 	// typically this plays out as current conditions loads, then hazards fails.
-	if (value.id === 0 && (value.status === STATUS.failed || value.status === STATUS.retrying)) {
+	if (
+		value.id === 0
+    && (value.status === STATUS.failed || value.status === STATUS.retrying)
+	) {
 		value.id = firstDisplayIndex;
-		value.status = displays[firstDisplayIndex].status;
+		value.status = firstDisplay.status;
 	}
 
 	// if hazards data arrives after the firstDisplayIndex loads, then we need to hot wire this to the first display
-	if (value.id === 0 && value.status === STATUS.loaded && displays[0] && displays[0].timing && displays[0].timing.totalScreens === 0) {
+	if (
+		value.id === 0
+    && value.status === STATUS.loaded
+    && displays[0]
+    && displays[0].timing
+    && displays[0].timing.totalScreens === 0
+	) {
 		value.id = firstDisplayIndex;
-		value.status = displays[firstDisplayIndex].status;
+		value.status = firstDisplay.status;
 	}
 
 	// if this is the first display and we're playing, load it up so it starts playing
-	if (isPlaying() && value.id === firstDisplayIndex && value.status === STATUS.loaded) {
+	if (
+		isPlaying()
+    && value.id === firstDisplayIndex
+    && value.status === STATUS.loaded
+	) {
 		navTo(msg.command.firstFrame);
 	}
 };
@@ -170,13 +245,13 @@ const updateStatus = (value) => {
 // note: a display that is "still waiting"/"retrying" is considered loaded intentionally
 // the weather.gov api has long load times for some products when you are the first
 // requester for the product after the cache expires
-const countLoadedDisplays = () => displays.reduce((acc, display) => {
-	if (display.status !== STATUS.loading) return acc + 1;
-	return acc;
+const countLoadedDisplays = () => getDisplays().reduce((acc, display) => {
+	if (display.status === STATUS.loading) return acc;
+	return acc + 1;
 }, 0);
 
 const hideAllCanvases = () => {
-	displays.forEach((display) => display.hideCanvas());
+	displays.forEach((display) => display?.hideCanvas?.());
 };
 
 // is playing interface
@@ -184,16 +259,18 @@ const isPlaying = () => playing;
 
 // navigation message constants
 const msg = {
-	response: {	// display to navigation
-		previous: Symbol('previous'),		// already at first frame, calling function should switch to previous canvas
-		inProgress: Symbol('inProgress'),	// have data to display, calling function should do nothing
-		next: Symbol('next'),				// end of frames reached, calling function should switch to next canvas
+	response: {
+		// display to navigation
+		previous: Symbol('previous'), // already at first frame, calling function should switch to previous canvas
+		inProgress: Symbol('inProgress'), // have data to display, calling function should do nothing
+		next: Symbol('next'), // end of frames reached, calling function should switch to next canvas
 	},
-	command: {	// navigation to display
+	command: {
+		// navigation to display
 		firstFrame: Symbol('firstFrame'),
 		previousFrame: Symbol('previousFrame'),
 		nextFrame: Symbol('nextFrame'),
-		lastFrame: Symbol('lastFrame'),	// used when navigating backwards from the begining of the next canvas
+		lastFrame: Symbol('lastFrame'), // used when navigating backwards from the begining of the next canvas
 	},
 };
 
@@ -217,7 +294,10 @@ const navTo = (direction) => {
 			// Check if displayCount is within bounds and the display exists
 			if (displayCount < displays.length && displays[displayCount]) {
 				const display = displays[displayCount];
-				if (display.status === STATUS.loaded && display.timing?.totalScreens > 0) {
+				if (
+					display.status === STATUS.loaded
+          && display.timing?.totalScreens > 0
+				) {
 					firstDisplay = display;
 				}
 			}
@@ -242,6 +322,7 @@ const navTo = (direction) => {
 // find the next or previous available display
 const loadDisplay = (direction) => {
 	const totalDisplays = displays.length;
+	if (totalDisplays === 0) return;
 	const curIdx = currentDisplayIndex();
 	let idx;
 	let foundSuitableDisplay = false;
@@ -249,7 +330,12 @@ const loadDisplay = (direction) => {
 	for (let i = 0; i < totalDisplays; i += 1) {
 		// convert form simple 0-10 to start at current display index +/-1 and wrap
 		idx = wrap(curIdx + (i + 1) * direction, totalDisplays);
-		if (displays[idx].status === STATUS.loaded && displays[idx].timing.totalScreens > 0) {
+		const candidate = displays[idx];
+		if (
+			candidate
+      && candidate.status === STATUS.loaded
+      && candidate.timing?.totalScreens > 0
+		) {
 			// Prevent infinite recursion by ensuring we don't select the same display
 			if (idx !== curIdx) {
 				foundSuitableDisplay = true;
@@ -259,7 +345,13 @@ const loadDisplay = (direction) => {
 	}
 
 	// If no other suitable display was found, but current display is still suitable (e.g. user only enabled one display), stay on it
-	if (!foundSuitableDisplay && displays[curIdx] && displays[curIdx].status === STATUS.loaded && displays[curIdx].timing.totalScreens > 0) {
+	const currentCandidate = curIdx >= 0 ? displays[curIdx] : undefined;
+	if (
+		!foundSuitableDisplay
+    && currentCandidate
+    && currentCandidate.status === STATUS.loaded
+    && currentCandidate.timing?.totalScreens > 0
+	) {
 		idx = curIdx;
 		foundSuitableDisplay = true;
 	}
@@ -271,6 +363,10 @@ const loadDisplay = (direction) => {
 	}
 
 	const newDisplay = displays[idx];
+	if (!newDisplay) {
+		console.warn('Attempted to navigate to an undefined display index', idx);
+		return;
+	}
 	// hide all displays
 	hideAllCanvases();
 	// show the new display and navigate to an appropriate display
@@ -279,8 +375,11 @@ const loadDisplay = (direction) => {
 };
 
 // get the current display index or value
-const currentDisplayIndex = () => displays.findIndex((display) => display.active);
-const currentDisplay = () => displays[currentDisplayIndex()];
+const currentDisplayIndex = () => displays.findIndex((display) => display?.active);
+const currentDisplay = () => {
+	const index = currentDisplayIndex();
+	return index === -1 ? undefined : displays[index];
+};
 
 const setPlaying = (newValue) => {
 	playing = newValue;
@@ -366,19 +465,32 @@ const clearElementStyles = (element, properties) => {
 // Define property groups for different scaling modes
 const SCALING_PROPERTIES = {
 	wrapper: ['width', 'height', 'transform', 'transform-origin'],
-	positioning: ['transform', 'transform-origin', 'width', 'height', 'position', 'left', 'top', 'margin-left', 'margin-top'],
+	positioning: [
+		'transform',
+		'transform-origin',
+		'width',
+		'height',
+		'position',
+		'left',
+		'top',
+		'margin-left',
+		'margin-top',
+	],
 };
 
 // resize the container on a page resize
 const resize = (force = false) => {
 	// Ignore resize events caused by pinch-to-zoom on mobile
-	if (window.visualViewport && Math.abs(window.visualViewport.scale - 1) > 0.01) {
+	if (
+		window.visualViewport
+    && Math.abs(window.visualViewport.scale - 1) > 0.01
+	) {
 		return;
 	}
 
 	const isFullscreen = !!document.fullscreenElement;
 	const isKioskMode = settings.kiosk?.value || false;
-	const isMobileSafariKiosk = isIOS() && isKioskMode;	// Detect Mobile Safari in kiosk mode (regardless of standalone status)
+	const isMobileSafariKiosk = isIOS() && isKioskMode; // Detect Mobile Safari in kiosk mode (regardless of standalone status)
 	const targetWidth = settings.wide.value ? 640 + 107 + 107 : 640;
 
 	// Use window width instead of bottom container width to avoid zero-dimension issues
@@ -392,7 +504,21 @@ const resize = (force = false) => {
 	const isKioskLike = isFullscreen || isKioskMode || isMobileSafariKiosk;
 
 	if (debugFlag('resize') || debugFlag('fullscreen')) {
-		console.log(`🖥️ Resize: force=${force} isKioskLike=${isKioskLike} window=${window.innerWidth}x${window.innerHeight} targetWidth=${targetWidth} widthZoom=${widthZoomPercent.toFixed(3)} heightZoom=${heightZoomPercent.toFixed(3)} finalScale=${scale.toFixed(3)} fullscreenElement=${!!document.fullscreenElement} isIOS=${isIOS()} standalone=${window.navigator.standalone} isMobileSafariKiosk=${isMobileSafariKiosk} kioskMode=${settings.kiosk?.value} wideMode=${settings.wide.value}`);
+		console.log(
+			`🖥️ Resize: force=${force} isKioskLike=${isKioskLike} window=${
+				window.innerWidth
+			}x${
+				window.innerHeight
+			} targetWidth=${targetWidth} widthZoom=${widthZoomPercent.toFixed(
+				3,
+			)} heightZoom=${heightZoomPercent.toFixed(3)} finalScale=${scale.toFixed(
+				3,
+			)} fullscreenElement=${!!document.fullscreenElement} isIOS=${isIOS()} standalone=${
+				window.navigator.standalone
+			} isMobileSafariKiosk=${isMobileSafariKiosk} kioskMode=${
+				settings.kiosk?.value
+			} wideMode=${settings.wide.value}`,
+		);
 	}
 
 	// Prevent zero or negative scale values
@@ -429,23 +555,27 @@ const resize = (force = false) => {
 		clearElementStyles(container, SCALING_PROPERTIES.positioning);
 		clearElementStyles(mainContainer, SCALING_PROPERTIES.positioning);
 
-		applyScanlineScaling(1.0);
+		applyCrtEffect();
 		return;
 	}
 
 	// MOBILE SCALING: Use wrapper scaling for mobile devices (but not when in fullscreen/kiosk mode)
-	if ((scale < 1.0 || (isKioskMode && !isKioskLike)) && !isMobileSafariKiosk && !isKioskLike) {
+	if (
+		(scale < 1.0 || (isKioskMode && !isKioskLike))
+    && !isMobileSafariKiosk
+    && !isKioskLike
+	) {
 		/*
-		 * MOBILE SCALING (Wrapper Scaling)
-		 *
-								* This path is used for regular mobile browsing (NOT fullscreen/kiosk modes).
-		 * Why scale the wrapper instead of mainContainer?
-		 * - For mobile devices where content is larger than viewport, we need to scale the entire layout
-		 * - The wrapper (#divTwc) contains both the main content AND the bottom navigation bar
-		 * - Scaling the wrapper ensures both elements are scaled together as a unit
-								* - Content aligns to top-left for typical mobile web browsing behavior (no centering)
-		 * - Uses explicit dimensions to prevent layout issues and eliminate gaps after scaling
-		 */
+     * MOBILE SCALING (Wrapper Scaling)
+     *
+     * This path is used for regular mobile browsing (NOT fullscreen/kiosk modes).
+     * Why scale the wrapper instead of mainContainer?
+     * - For mobile devices where content is larger than viewport, we need to scale the entire layout
+     * - The wrapper (#divTwc) contains both the main content AND the bottom navigation bar
+     * - Scaling the wrapper ensures both elements are scaled together as a unit
+     * - Content aligns to top-left for typical mobile web browsing behavior (no centering)
+     * - Uses explicit dimensions to prevent layout issues and eliminate gaps after scaling
+     */
 
 		// Reset any container/mainContainer styles that might have been set during fullscreen/kiosk mode
 		const container = document.querySelector('#container');
@@ -465,7 +595,7 @@ const resize = (force = false) => {
 
 		wrapper.style.setProperty('width', `${wrapperWidth}px`);
 		wrapper.style.setProperty('height', `${scaledHeight}px`); // Use scaled height to eliminate gap under #divTwc on index page
-		applyScanlineScaling(scale);
+		applyCrtEffect();
 		return;
 	}
 
@@ -485,13 +615,13 @@ const resize = (force = false) => {
 
 	if (isMobileSafariKiosk) {
 		/*
-		 * MOBILE SAFARI KIOSK MODE (Manual offset calculation)
-		 *
-		 * Why this approach?
-		 * - Mobile Safari in kiosk mode has unique viewport behaviors that don't work well with standard CSS centering
-		 * - We want orientation-specific centering: vertical in portrait, horizontal in landscape
-		 * - The standard CSS centering method can cause layout issues in Mobile Safari's constrained environment
-		 */
+     * MOBILE SAFARI KIOSK MODE (Manual offset calculation)
+     *
+     * Why this approach?
+     * - Mobile Safari in kiosk mode has unique viewport behaviors that don't work well with standard CSS centering
+     * - We want orientation-specific centering: vertical in portrait, horizontal in landscape
+     * - The standard CSS centering method can cause layout issues in Mobile Safari's constrained environment
+     */
 		const scaledWidth = wrapperWidth * scale;
 		const scaledHeight = wrapperHeight * scale;
 
@@ -508,7 +638,13 @@ const resize = (force = false) => {
 		}
 
 		if (debugFlag('fullscreen')) {
-			console.log(`📱 Mobile Safari kiosk centering: ${isPortrait ? 'portrait' : 'landscape'} wrapper=${wrapperWidth}x${wrapperHeight} scale=${scale.toFixed(3)} offset=${offsetX.toFixed(1)},${offsetY.toFixed(1)}`);
+			console.log(
+				`📱 Mobile Safari kiosk centering: ${
+					isPortrait ? 'portrait' : 'landscape'
+				} wrapper=${wrapperWidth}x${wrapperHeight} scale=${scale.toFixed(
+					3,
+				)} offset=${offsetX.toFixed(1)},${offsetY.toFixed(1)}`,
+			);
 		}
 
 		// Set positioning values for manual offset calculation
@@ -519,20 +655,26 @@ const resize = (force = false) => {
 		marginTop = null; // Clear any previous centering margins
 	} else {
 		/*
-		 * STANDARD FULLSCREEN/KIOSK MODE (CSS-based Centering)
-		 *
-		 * Why this approach?
-		 * - Should work reliably across all other browsers and scenarios (desktop, non-Safari mobile, etc.)
-		 * - Uses standard CSS centering techniques that browsers handle efficiently
-		 * - Always centers both horizontally and vertically
-		 */
+     * STANDARD FULLSCREEN/KIOSK MODE (CSS-based Centering)
+     *
+     * Why this approach?
+     * - Should work reliably across all other browsers and scenarios (desktop, non-Safari mobile, etc.)
+     * - Uses standard CSS centering techniques that browsers handle efficiently
+     * - Always centers both horizontally and vertically
+     */
 		const scaledWidth = wrapperWidth * scale;
 		const scaledHeight = wrapperHeight * scale;
 		const offsetX = (window.innerWidth - scaledWidth) / 2;
 		const offsetY = (window.innerHeight - scaledHeight) / 2;
 
 		if (debugFlag('fullscreen')) {
-			console.log(`🖥️ Applying fullscreen/kiosk scaling: wrapper=${wrapperWidth}x${wrapperHeight} scale=${scale.toFixed(3)} offset=${offsetX.toFixed(1)},${offsetY.toFixed(1)} target=${isFullscreen ? '#container' : '#divTwcMain'}`);
+			console.log(
+				`🖥️ Applying fullscreen/kiosk scaling: wrapper=${wrapperWidth}x${wrapperHeight} scale=${scale.toFixed(
+					3,
+				)} offset=${offsetX.toFixed(1)},${offsetY.toFixed(1)} target=${
+					isFullscreen ? '#container' : '#divTwcMain'
+				}`,
+			);
 		}
 
 		// Set positioning values for CSS-based centering
@@ -559,7 +701,11 @@ const resize = (force = false) => {
 
 	// Apply shared properties to the target element
 	targetElement.style.setProperty('transform', `scale(${scale})`, 'important');
-	targetElement.style.setProperty('transform-origin', transformOrigin, 'important');
+	targetElement.style.setProperty(
+		'transform-origin',
+		transformOrigin,
+		'important',
+	);
 	// the width of the target element does not change it is the fixed width of the 4:3 display which is then scaled
 	// the wrapper adds margins and padding to achieve widescreen
 	// targetElement.style.setProperty('width', `${wrapperWidth}px`, 'important');
@@ -580,191 +726,115 @@ const resize = (force = false) => {
 		targetElement.style.removeProperty('margin-top');
 	}
 
-	applyScanlineScaling(scale);
+	applyCrtEffect();
 };
 
 // reset all statuses to loading on all displays, used to keep the progress bar accurate during refresh
 const resetStatuses = () => {
-	displays.forEach((display) => { display.status = STATUS.loading; });
+	displays.forEach((display) => {
+		if (!display) return;
+		display.status = STATUS.loading;
+	});
 };
 
-// Apply scanline scaling to try and prevent banding by avoiding fractional scaling
-const applyScanlineScaling = (scale) => {
+// Apply CRT barrel distortion effect based on strength setting
+const applyCrtEffect = () => {
+	const strength = parseInt(settings?.crtStrength?.value || '50', 10);
+	const mainContainer = document.querySelector('#divTwcMain');
 	const container = document.querySelector('#container');
-	if (!container || !container.classList.contains('scanlines')) {
+
+	if (!mainContainer || !container) {
 		return;
 	}
 
-	const viewportWidth = window.innerWidth;
-	const viewportHeight = window.innerHeight;
-	const devicePixelRatio = window.devicePixelRatio || 1;
-	const currentMode = settings?.scanLineMode?.value || 'auto';
-	let cssThickness;
-	let scanlineDebugInfo = null;
+	// Determine if we're in fullscreen mode
+	const isFullscreen = !!document.fullscreenElement;
 
-	// Helper function to round CSS values intelligently based on scale and DPR
-	// At high scales, precise fractional pixels render fine; at low scales, alignment matters more
-	const roundCSSValue = (value) => {
-		// On 1x DPI displays, use exact calculated values
-		if (devicePixelRatio === 1) {
-			return value;
-		}
+	// Set CSS custom property for barrel distortion strength
+	// 0% = no distortion, 100% = maximum distortion
+	const distortionScale = strength / 100;
 
-		// At high scales (>2x), the browser scaling dominates and fractional pixels render well
-		// Prioritize nice fractions for better visual consistency
-		if (scale > 2.0) {
-			// Try quarter-pixel boundaries first (0.25, 0.5, 0.75, 1.0, etc.)
-			const quarterRounded = Math.round(value * 4) / 4;
-			if (Math.abs(quarterRounded - value) <= 0.125) { // Within 0.125px tolerance
-				return quarterRounded;
-			}
-			// Fall through to half-pixel boundaries for high scale fallback
-		}
-
-		// At lower scales (and high scale fallback), pixel alignment matters more for crisp rendering
-		// Round UP to the next half-pixel to ensure scanlines are never thinner than intended
-		const halfPixelRounded = Math.ceil(value * 2) / 2;
-		return halfPixelRounded;
-	};
-
-	// Manual modes: use smart rounding in scaled scenarios to avoid banding
-	if (currentMode === 'thin') {
-		const rawValue = 1 / scale;
-		const cssValue = scale === 1.0 ? rawValue : roundCSSValue(rawValue);
-		cssThickness = `${cssValue}px`;
-		scanlineDebugInfo = {
-			css: cssValue,
-			visual: 1,
-			target: '1px visual thickness',
-			reason: scale === 1.0 ? 'Thin: 1px visual user override (exact)' : 'Thin: 1px visual user override (rounded)',
-			isManual: true,
-		};
-	} else if (currentMode === 'medium') {
-		const rawValue = 2 / scale;
-		const cssValue = scale === 1.0 ? rawValue : roundCSSValue(rawValue);
-		cssThickness = `${cssValue}px`;
-		scanlineDebugInfo = {
-			css: cssValue,
-			visual: 2,
-			target: '2px visual thickness',
-			reason: scale === 1.0 ? 'Medium: 2px visual user override (exact)' : 'Medium: 2px visual user override (rounded)',
-			isManual: true,
-		};
-	} else if (currentMode === 'thick') {
-		const rawValue = 3 / scale;
-		const cssValue = scale === 1.0 ? rawValue : roundCSSValue(rawValue);
-		cssThickness = `${cssValue}px`;
-		scanlineDebugInfo = {
-			css: cssValue,
-			visual: 3,
-			target: '3px visual thickness',
-			reason: scale === 1.0 ? 'Thick: 3px visual user override (exact)' : 'Thick: 3px visual user override (rounded)',
-			isManual: true,
-		};
+	// Apply CRT effect to the element that's being scaled/transformed
+	// In fullscreen mode, apply to #container (which gets the transform)
+	// In normal mode, apply to #divTwcMain
+	if (isFullscreen) {
+		// Apply to container in fullscreen
+		container.style.setProperty('--crt-distortion', distortionScale);
+		container.setAttribute('data-crt-strength', strength);
+		// Remove from mainContainer to avoid double filtering
+		mainContainer.style.removeProperty('--crt-distortion');
+		mainContainer.removeAttribute('data-crt-strength');
 	} else {
-		// Auto mode: choose thickness based on scaling behavior
-
-		let visualThickness;
-		let reason;
-
-		if (scale === 1.0) {
-			// Unscaled mode: use reasonable thickness based on device characteristics
-			const isHighDPIMobile = devicePixelRatio >= 2 && viewportWidth <= 768 && viewportHeight <= 768;
-			const isHighDPITablet = devicePixelRatio >= 2 && viewportWidth <= 1024 && viewportHeight <= 1024;
-
-			if (isHighDPIMobile) {
-				// High-DPI mobile: use thin scanlines but not too thin
-				const cssValue = roundCSSValue(1.5 / devicePixelRatio);
-				cssThickness = `${cssValue}px`;
-				reason = `Auto: ${cssValue}px unscaled (high-DPI mobile, DPR=${devicePixelRatio})`;
-			} else if (isHighDPITablet) {
-				// High-DPI tablets: use slightly thicker scanlines for better visibility
-				const cssValue = roundCSSValue(1.5 / devicePixelRatio);
-				cssThickness = `${cssValue}px`;
-				reason = `Auto: ${cssValue}px unscaled (high-DPI tablet, DPR=${devicePixelRatio})`;
-			} else if (devicePixelRatio >= 2) {
-				// High-DPI desktop: use scanlines that look similar to scaled mode
-				const cssValue = roundCSSValue(1.5 / devicePixelRatio);
-				cssThickness = `${cssValue}px`;
-				reason = `Auto: ${cssValue}px unscaled (high-DPI desktop, DPR=${devicePixelRatio})`;
-			} else {
-				// Standard DPI desktop: use 2px for better visibility
-				cssThickness = '2px';
-				reason = 'Auto: 2px unscaled (standard DPI desktop)';
-			}
-		} else if (scale < 1.0) {
-			// Mobile scaling: use thinner scanlines for small displays
-			visualThickness = 1;
-			const cssValue = roundCSSValue(visualThickness / scale);
-			cssThickness = `${cssValue}px`;
-			reason = `Auto: ${cssValue}px scaled (mobile, scale=${scale})`;
-		} else if (scale >= 3.0) {
-			// Very high scale (large displays/high DPI): use thick scanlines for visibility
-			visualThickness = 3;
-			const cssValue = roundCSSValue(visualThickness / scale);
-			cssThickness = `${cssValue}px`;
-			reason = `Auto: ${cssValue}px scaled (large display/high scale, scale=${scale})`;
-		} else {
-			// Medium scale kiosk/fullscreen: use medium scanlines with smart rounding
-			visualThickness = 2;
-			const rawValue = visualThickness / scale;
-			const cssValue = roundCSSValue(rawValue);
-			cssThickness = `${cssValue}px`;
-			reason = `Auto: ${cssValue}px scaled (kiosk/fullscreen, scale=${scale})`;
-
-			if (debugFlag('scanlines')) {
-				console.log(`↕️ Kiosk/fullscreen rounding: raw=${rawValue}, rounded=${cssValue}, DPR=${devicePixelRatio}, scale=${scale}`);
-			}
-		}
-
-		// Extract numeric value from cssThickness for debug info
-		const cssNumericValue = parseFloat(cssThickness);
-
-		scanlineDebugInfo = {
-			css: cssNumericValue,
-			visual: scale === 1.0 ? cssNumericValue : visualThickness, // For unscaled mode, visual thickness equals CSS thickness
-			target: scale === 1.0 ? `${cssNumericValue}px CSS (unscaled)` : `${visualThickness}px visual thickness`,
-			reason,
-			isManual: false,
-		};
+		// Apply to mainContainer in normal mode
+		mainContainer.style.setProperty('--crt-distortion', distortionScale);
+		mainContainer.setAttribute('data-crt-strength', strength);
+		// Remove from container to avoid double filtering
+		container.style.removeProperty('--crt-distortion');
+		container.removeAttribute('data-crt-strength');
 	}
 
-	container.style.setProperty('--scanline-thickness', cssThickness);
+	// Integrate scanlines: enable when CRT effect is active (strength > 0)
+	if (strength > 0) {
+		container.classList.add('scanlines');
+	} else {
+		container.classList.remove('scanlines');
+	}
 
-	// Output debug information if enabled
-	if (debugFlag('scanlines')) {
-		const actualRendered = scanlineDebugInfo.css * scale;
-		const physicalRendered = actualRendered * devicePixelRatio;
-		const visualThickness = scanlineDebugInfo.visual || actualRendered; // Use visual thickness if available
-
-		console.log(`↕️ Scanline optimization: ${cssThickness} CSS × ${scale.toFixed(3)} scale = ${actualRendered.toFixed(3)}px rendered (${visualThickness}px visual target) × ${devicePixelRatio}x DPI = ${physicalRendered.toFixed(3)}px physical - ${scanlineDebugInfo.reason}`);
-		console.log(`↕️  Display: ${viewportWidth}×${viewportHeight}, Scale factors: width=${(window.innerWidth / (settings.wide.value ? 854 : 640)).toFixed(3)}, height=${(window.innerHeight / 480).toFixed(3)}, DPR=${devicePixelRatio}`);
-		console.log(`↕️  Thickness: CSS=${cssThickness}, Visual=${visualThickness.toFixed(1)}px, Rendered=${actualRendered.toFixed(3)}px, Physical=${physicalRendered.toFixed(3)}px`);
+	if (debugFlag('crt')) {
+		console.log(
+			`📺 CRT Effect: ${strength}% strength (distortion scale: ${distortionScale.toFixed(
+				2,
+			)}), scanlines: ${strength > 0 ? 'ON' : 'OFF'}`,
+		);
 	}
 };
 
-// Make applyScanlineScaling available for direct calls from Settings
-window.applyScanlineScaling = applyScanlineScaling;
+// Make applyCrtEffect available for direct calls from Settings
+window.applyCrtEffect = applyCrtEffect;
 
 // allow displays to register themselves
 const registerDisplay = (display) => {
 	if (displays[display.navId]) console.warn(`Display nav ID ${display.navId} already in use`);
+	resolveDisplayEnabledState(display);
 	displays[display.navId] = display;
 
 	// generate checkboxes
 	generateCheckboxes();
 };
 
+const unregisterDisplay = (display) => {
+	if (!display) return;
+	if (displays[display.navId] && displays[display.navId] !== display) {
+		console.warn(`Display nav ID ${display.navId} mismatch on unregister`);
+	}
+	delete displays[display.navId];
+	trimDisplayTail();
+	generateCheckboxes();
+};
+
+const getDisplays = () => displays.filter((display) => display);
+
 const generateCheckboxes = () => {
 	const availableDisplays = document.querySelector('#enabledDisplays');
 
 	if (!availableDisplays) return;
 	// generate checkboxes
-	const checkboxes = displays.map((d) => d.generateCheckbox(d.defaultEnabled)).filter((d) => d);
+	const checkboxes = getDisplays()
+		.map((display) => display.generateCheckbox(display.defaultEnabled))
+		.filter((checkbox) => checkbox);
 
 	// write to page
 	availableDisplays.innerHTML = '';
 	availableDisplays.append(...checkboxes);
+	try {
+		document.dispatchEvent(
+			new CustomEvent('ws4kp:displays-changed', {
+				detail: { count: checkboxes.length },
+			}),
+		);
+	} catch (error) {
+		console.error('Failed to dispatch displays-changed event', error);
+	}
 };
 
 // special registration method for progress display
@@ -772,14 +842,25 @@ const registerProgress = (_progress) => {
 	progress = _progress;
 };
 
+const setTextContent = (selector, value) => {
+	const element = document.querySelector(selector);
+	if (!element) return;
+	// Using textContent avoids injecting markup and handles undefined values gracefully
+	element.textContent = value ?? '';
+};
+
 const populateWeatherParameters = (params, point) => {
-	document.querySelector('#spanCity').innerHTML = `${params.city}, `;
-	document.querySelector('#spanState').innerHTML = params.state;
-	document.querySelector('#spanStationId').innerHTML = params.stationId;
-	document.querySelector('#spanRadarId').innerHTML = params.radarId;
-	document.querySelector('#spanZoneId').innerHTML = params.zoneId;
-	document.querySelector('#spanOfficeId').innerHTML = point.cwa;
-	document.querySelector('#spanGridPoint').innerHTML = `${point.gridX},${point.gridY}`;
+	setTextContent('#spanCity', params.city ? `${params.city}, ` : '');
+	setTextContent('#spanState', params.state);
+	setTextContent('#spanStationId', params.stationId);
+	setTextContent('#spanRadarId', params.radarId);
+	setTextContent('#spanZoneId', params.zoneId);
+	setTextContent('#spanOfficeId', point?.cwa);
+	if (Number.isFinite(point?.gridX) && Number.isFinite(point?.gridY)) {
+		setTextContent('#spanGridPoint', `${point.gridX},${point.gridY}`);
+	} else {
+		setTextContent('#spanGridPoint', '');
+	}
 };
 
 const latLonReceived = (data, haveDataCallback) => {
@@ -792,12 +873,15 @@ export {
 	updateStatus,
 	displayNavMessage,
 	resetStatuses,
+	hideAllCanvases,
 	isPlaying,
 	resize,
 	registerDisplay,
+	unregisterDisplay,
 	registerProgress,
 	currentDisplay,
 	getDisplay,
+	getDisplays,
 	msg,
 	message,
 	latLonReceived,
