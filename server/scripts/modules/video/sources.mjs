@@ -188,16 +188,22 @@ const loadFromStorage = () => {
 	}
 };
 
+// btoa/atob only handle Latin-1, so go through UTF-8 bytes to support any title.
 const base64UrlEncode = (value) => {
 	const json = typeof value === 'string' ? value : JSON.stringify(value);
-	return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	const bytes = new TextEncoder().encode(json);
+	let binary = '';
+	bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+	return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
 const base64UrlDecode = (value) => {
 	const padded = value.replace(/-/g, '+').replace(/_/g, '/');
 	const paddingLength = (4 - (padded.length % 4)) % 4;
 	const paddedValue = `${padded}${'='.repeat(paddingLength)}`;
-	return atob(paddedValue);
+	const binary = atob(paddedValue);
+	const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+	return new TextDecoder().decode(bytes);
 };
 
 const decodeCompactValue = (value) => {
@@ -297,11 +303,28 @@ const loadFromQueryString = () => {
 	return combined;
 };
 
+// Once a shared link's videos are imported, drop the video params so a refresh
+// reads the (possibly edited) stored list instead of importing the link again.
+const stripVideoParamsFromAddressBar = () => {
+	if (typeof window === 'undefined' || !window.history?.replaceState) return;
+	try {
+		const url = new URL(window.location.href);
+		const videoKeys = [...url.searchParams.keys()]
+			.filter((key) => key === 'video' || /^video[-_]\d+[-_]/i.test(key));
+		if (videoKeys.length === 0) return;
+		videoKeys.forEach((key) => url.searchParams.delete(key));
+		window.history.replaceState(null, '', url.toString());
+	} catch (error) {
+		console.warn('Failed to remove video params from the address bar', error);
+	}
+};
+
 const hydrateInitialSources = () => {
 	if (initialized) return;
 	initialized = true;
 
 	const querySources = loadFromQueryString();
+	stripVideoParamsFromAddressBar();
 	if (querySources.length > 0) {
 		sources = querySources;
 		persist();

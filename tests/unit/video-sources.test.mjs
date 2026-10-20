@@ -71,3 +71,17 @@ test('permalink encoding never emits an unsafe URL', async () => {
 	const encoded = encodeSourceForPermalink({ url: 'javascript:alert(1)' });
 	assert.equal(decodeSourceFromPermalink(encoded).url, '');
 });
+
+test('permalink round-trips non-Latin-1 titles', async () => {
+	const { encodeSourceForPermalink, decodeSourceFromPermalink } = await load('');
+	const enc = encodeSourceForPermalink({ title: 'Traffic – Downtown 🚗', url: 'https://e.test/a.m3u8', durationSec: 20 });
+	assert.equal(decodeSourceFromPermalink(enc).title, 'Traffic – Downtown 🚗');
+});
+
+test('hydrating from URL strips video params from the address bar', async () => {
+	const calls = [];
+	await load('?video_0_url=https://e.test/a.m3u8&units=us', {}, { replaceState: (...a) => calls.push(a[2]) });
+	assert.equal(calls.length, 1);
+	assert.ok(!String(calls[0]).includes('video_'));
+	assert.ok(String(calls[0]).includes('units=us'));
+});
