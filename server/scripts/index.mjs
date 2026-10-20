@@ -623,8 +623,8 @@ const init = async () => {
 
 	// Auto-play logic: also play immediately if kiosk mode is enabled
 	const play = settings.kiosk.value || urlKioskCheckbox === 'true'
-    	? 'true'
-    	: localStorage.getItem('play');
+		? 'true'
+		: localStorage.getItem('play');
 	if (play === null || play === 'true') postMessage('navButton', 'play');
 
 	document.querySelector('#btnClearQuery').addEventListener('click', () => {

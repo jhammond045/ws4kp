@@ -242,8 +242,8 @@ const openOsdModal = (config) => {
 	modalRoot.style.display = 'flex';
 
 	previousFocus = document.activeElement instanceof HTMLElement
-    	? document.activeElement
-    	: null;
+		? document.activeElement
+		: null;
 
 	onOpenCallback(config);
 

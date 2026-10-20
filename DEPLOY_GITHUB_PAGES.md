@@ -14,54 +14,35 @@ This guide covers deploying WeatherStar 4000+ to GitHub Pages.
 
 1. Go to your repository on GitHub
 2. Click **Settings** → **Pages**
-3. Under "Build and deployment":
-   - **Source**: Select "GitHub Actions" (recommended) OR "Deploy from a branch"
-   - If using branch: Select `gh-pages` branch and `/ (root)` folder
+3. Under "Build and deployment", set **Source** to "GitHub Actions"
 
-### 2. Choose Deployment Method
+The site is deployed only by the workflow. Pages does not serve a `gh-pages` branch in this mode, so a leftover one from older manual deploys can be deleted.
 
-You have two options:
+## Deployment with GitHub Actions
 
-## Option A: Automatic Deployment with GitHub Actions (Recommended)
+The `.github/workflows/deploy.yml` file is already configured. Every push to `main` will:
 
-The `.github/workflows/deploy.yml` file is already configured. Every push to `main` will automatically:
-
-1. Build the SPA
-2. Deploy to GitHub Pages
+1. Install dependencies with `npm ci` (Node 22)
+2. Run `npm test` and `npm run lint`; a failure stops the deploy
+3. Build the SPA
+4. Deploy `dist/` to GitHub Pages
 
 **Setup:**
 
 ```bash
-# Just push your code - deployment happens automatically!
-git add .
-git commit -m "Enable GitHub Pages deployment"
+# Commit your changes, then push; the workflow deploys
 git push origin main
 ```
 
 Your site will be live at: `https://jhammond045.github.io/ws4kp/`
 
-## Option B: Manual Deployment
-
-Use the deployment script for manual control:
-
-```bash
-# Run the deployment script
-./deploy-gh-pages.sh
-```
-
-This script will:
-
-1. Build the SPA (`npm run build:spa`)
-2. Create/update the `gh-pages` branch
-3. Push to GitHub
+You can also run the workflow by hand from the Actions tab (it has a `workflow_dispatch` trigger).
 
 ## Important Configuration Notes
 
 ### Base URL Configuration
 
-If deploying to `username.github.io/repository-name/`, you may need to update asset paths.
-
-Check `gulpfile.mjs` and ensure paths are relative or properly configured for the subdirectory.
+The site is served from a subpath (`/ws4kp/`), so every asset and data URL in the app must be relative (`data/stations.json`, not `/data/stations.json`). A root-absolute path works locally and 404s on Pages.
 
 ### CORS and API Access
 
@@ -81,9 +62,10 @@ GitHub Pages doesn't provide server-side proxy capabilities, so:
 
 To use a custom domain:
 
-1. Add a `CNAME` file to the `dist` folder before building
-2. Configure DNS settings with your domain provider
-3. Enable HTTPS in GitHub Pages settings
+1. Set the domain under **Settings** → **Pages** → **Custom domain**. With workflow deployments this setting is what counts; a `CNAME` file in the artifact is not required.
+2. If you also want a `CNAME` file in the build, put it in `server/` (not `dist/`, which the build wipes) and add `'server/CNAME'` to `otherFiles` in `gulp/publish-frontend.mjs`.
+3. Configure DNS settings with your domain provider
+4. Enable HTTPS in GitHub Pages settings
 
 ## Troubleshooting
 
@@ -95,9 +77,9 @@ To use a custom domain:
 
 ### 404 errors?
 
-- Ensure GitHub Pages is enabled in repository settings
-- Check that the `gh-pages` branch exists
-- Verify the source is set correctly (GitHub Actions or gh-pages branch)
+- Ensure GitHub Pages is enabled in repository settings, with Source set to "GitHub Actions"
+- Check that the latest "Deploy to GitHub Pages" run succeeded
+- If only some files 404 (data, radar tiles), look for a root-absolute path; see Base URL Configuration above
 
 ### API errors?
 
@@ -116,22 +98,7 @@ If GitHub Pages doesn't meet your needs, consider:
 
 ## Updating Your Site
 
-### With GitHub Actions:
-
-```bash
-# Make your changes
-git add .
-git commit -m "Update site"
-git push origin main
-# Deployment happens automatically
-```
-
-### With Manual Deployment:
-
-```bash
-# Make your changes, then:
-./deploy-gh-pages.sh
-```
+Commit your changes and push to `main`. The workflow tests, lints, builds and deploys.
 
 ## Build Only (No Deploy)
 

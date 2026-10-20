@@ -14,8 +14,8 @@
 		"build:spa": "npm run build:css && npm run build",
 		"serve:spa": "npx http-server ./dist -p 7654 -c-1 --cors",
 		"preview": "npm run build:spa && npm run serve:spa",
-		"lint": "eslint ./server/scripts/**/*.mjs ./proxy/**/*.mjs ./src/**/*.mjs *.mjs",
-		"lint:fix": "eslint --fix ./server/scripts/**/*.mjs ./proxy/**/*.mjs ./src/**/*.mjs *.mjs",
+		"lint": "eslint './server/scripts/**/*.mjs' './proxy/**/*.mjs' './src/**/*.mjs' '*.mjs'",
+		"lint:fix": "eslint --fix './server/scripts/**/*.mjs' './proxy/**/*.mjs' './src/**/*.mjs' '*.mjs'",
 		"lintall": "eslint ./server/scripts/**/*.mjs ./proxy/**/*.mjs ./src/**/*.mjs *.mjs ./datagenerators/**/*.mjs ./gulp/**/*.mjs ./tests/**/*.mjs",
 		"lintall:fix": "eslint --fix ./server/scripts/**/*.mjs ./proxy/**/*.mjs ./src/**/*.mjs *.mjs ./datagenerators/**/*.mjs ./gulp/**/*.mjs ./tests/**/*.mjs"
 	},
@@ -61,7 +61,6 @@
 		"dotenv": "^17.0.1",
 		"ejs": "^3.1.5",
 		"express": "^5.1.0",
-		"metar-taf-parser": "^9.0.0",
-		"npm": "^11.6.0"
+		"metar-taf-parser": "^9.0.0"
 	}
 }

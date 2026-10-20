@@ -14,7 +14,7 @@ The application can be built into a fully static SPA that runs entirely in the b
 
 ## Prerequisites
 
-- Node.js (v18 or higher recommended)
+- Node.js 20 or newer (CI uses 22)
 - npm
 
 ## Installation
@@ -68,7 +68,7 @@ npm run preview
 This will:
 
 1. Build the complete SPA
-2. Start an HTTP server on `http://localhost:8080`
+2. Start an HTTP server on `http://localhost:7654`
 3. Disable caching for easy development
 4. Enable CORS for API requests
 
@@ -86,7 +86,7 @@ After running `npm run build:spa`, the `./dist/` directory contains a complete s
 
 - **Netlify**: Drop the `dist` folder or connect to Git
 - **Vercel**: Deploy via CLI or Git integration
-- **GitHub Pages**: Push `dist` contents to `gh-pages` branch
+- **GitHub Pages**: Use the included workflow; see [DEPLOY_GITHUB_PAGES.md](DEPLOY_GITHUB_PAGES.md)
 - **AWS S3**: Upload to S3 bucket with static website hosting
 - **Cloudflare Pages**: Connect to Git repository
 - **Any web server**: Copy `dist` contents to web root
@@ -104,7 +104,7 @@ After running `npm run build:spa`, the `./dist/` directory contains a complete s
    - Images, fonts: 1 year (`max-age=31536000`)
    - Music files: 1 year (`max-age=31536000`)
 
-4. **Fallback Route**: Configure your server to serve `index.html` for all routes (for SPA routing).
+4. **Subpath hosting**: The build works from a subpath such as `/ws4kp/` as long as asset and data URLs stay relative. The app has a single page and no client-side routes, so no fallback route is needed.
 
 ## Directory Structure (after build)
 
@@ -184,5 +184,6 @@ To customize the build:
 
 For issues or questions:
 
-- GitHub Issues: https://github.com/netbymatt/ws4kp/issues
-- Documentation: https://github.com/netbymatt/ws4kp#readme
+- This fork (OSD menu, embedded video, static build): https://github.com/jhammond045/ws4kp/issues
+- Upstream WeatherStar 4000+: https://github.com/netbymatt/ws4kp/issues
+- Upstream documentation: https://github.com/netbymatt/ws4kp#readme

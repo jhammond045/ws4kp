@@ -361,8 +361,8 @@ class WeatherDisplay {
 					if (timingIndex >= 0 && timingIndex < this.timing.delay.length) {
 						// Handle both simple number delays and object delays with time property (radar)
 						const delayValue = typeof this.timing.delay[timingIndex] === 'object'
-              	? this.timing.delay[timingIndex].time
-              	: this.timing.delay[timingIndex];
+							? this.timing.delay[timingIndex].time
+							: this.timing.delay[timingIndex];
 						expectedMs = this.timing.baseDelay
               * delayValue
               * (settings?.speed?.value || 1);
@@ -516,7 +516,7 @@ class WeatherDisplay {
       && this.timingDebug.baseCountLog.length > 1
 		) {
 			const totalDuration = this.timingDebug.baseCountLog[this.timingDebug.baseCountLog.length - 1]
-        	.timestamp - this.timingDebug.baseCountLog[0].timestamp;
+				.timestamp - this.timingDebug.baseCountLog[0].timestamp;
 			const avgInterval = totalDuration / (this.timingDebug.baseCountLog.length - 1);
 			console.log(
 				`⏱️ [${
@@ -608,10 +608,10 @@ class WeatherDisplay {
 		// refresh time can be forced by the user (for hazards)
 		const refreshTime = this.refreshTime ?? settings.refreshTime.value;
 		this.autoRefreshHandle = this.autoRefreshHandle
-      ?? setInterval(
-      	() => this.getData(this.weatherParameters, true),
-      	refreshTime,
-      );
+			?? setInterval(
+				() => this.getData(this.weatherParameters, true),
+				refreshTime,
+			);
 	}
 }
 
