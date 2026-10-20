@@ -6,6 +6,7 @@ import {
 	moveVideoSource,
 	subscribeVideoSources,
 	defaults as defaultSource,
+	isAllowedMediaUrl,
 } from './sources.mjs';
 import { detectSourceType, extractYouTubeId } from './detect.mjs';
 import { openOsdModal } from '../osd/osdModal.mjs';
@@ -63,6 +64,8 @@ const computeIssues = (source) => {
 	const trimmedUrl = source.url.trim();
 	if (!trimmedUrl) {
 		issues.push('URL is required');
+	} else if (!isAllowedMediaUrl(trimmedUrl)) {
+		issues.push('URL must start with http:// or https://');
 	}
 
 	if (source.durationSec < 5) {

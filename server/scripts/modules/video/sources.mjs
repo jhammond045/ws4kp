@@ -15,6 +15,19 @@ const DEFAULTS = {
 	type: 'auto',
 };
 
+const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
+
+// Only http(s) URLs may reach a player, iframe or poster. Anything else
+// (javascript:, data:, relative paths, junk) is rejected.
+export const isAllowedMediaUrl = (value) => {
+	if (typeof value !== 'string' || value.trim() === '') return false;
+	try {
+		return ALLOWED_PROTOCOLS.has(new URL(value.trim()).protocol);
+	} catch (_error) {
+		return false;
+	}
+};
+
 const listeners = new Set();
 let sources = [];
 let initialized = false;
@@ -82,7 +95,12 @@ const normalizeType = (value) => {
 	return ALLOWED_TYPES.has(candidate) ? candidate : DEFAULTS.type;
 };
 
-const normalizeSource = (raw = {}) => {
+// strict (the default) clears any URL that isAllowedMediaUrl rejects. It applies
+// to everything arriving from outside: permalinks, localStorage and permalink
+// output. updateVideoSource passes strict: false so the OSD editor keeps a
+// half-typed URL (the card shows an issue for it); the renderers refuse to play
+// it and the next load from storage drops it.
+const normalizeSource = (raw = {}, { strict = true } = {}) => {
 	const normalized = {
 		...DEFAULTS,
 		...raw,
@@ -91,6 +109,8 @@ const normalizeSource = (raw = {}) => {
 	normalized.id = ensureId(raw.id);
 	normalized.title = parseString(raw.title, DEFAULTS.title);
 	normalized.url = parseString(raw.url, DEFAULTS.url);
+	// Unsafe URLs become '' so the callers' empty-URL filters drop them.
+	if (strict && !isAllowedMediaUrl(normalized.url)) normalized.url = '';
 	normalized.durationSec = parseNumber(raw.durationSec, DEFAULTS.durationSec, {
 		min: 5,
 		max: 3600,
@@ -102,6 +122,7 @@ const normalizeSource = (raw = {}) => {
 		max: 120,
 	});
 	normalized.poster = parseString(raw.poster, DEFAULTS.poster);
+	if (strict && !isAllowedMediaUrl(normalized.poster)) normalized.poster = '';
 	normalized.startAt = parseNumber(raw.startAt, DEFAULTS.startAt, {
 		min: 0,
 		max: 86400,
@@ -311,7 +332,7 @@ export const updateVideoSource = (id, changes = {}) => {
 		...sources[index],
 		...changes,
 		id: sources[index].id,
-	});
+	}, { strict: false });
 	sources[index] = merged;
 	persist();
 	emitChange();
@@ -366,9 +387,9 @@ export const encodeSourceForPermalink = (source) => {
 		muted: normalized.muted === DEFAULTS.muted ? undefined : normalized.muted,
 		loop: normalized.loop === DEFAULTS.loop ? undefined : normalized.loop,
 		preloadSec:
-      normalized.preloadSec === DEFAULTS.preloadSec
-      	? undefined
-      	: normalized.preloadSec,
+			normalized.preloadSec === DEFAULTS.preloadSec
+				? undefined
+				: normalized.preloadSec,
 		poster: normalized.poster || undefined,
 		startAt: normalized.startAt || undefined,
 		endAt: normalized.endAt ?? undefined,
@@ -397,6 +418,7 @@ export default {
 	clearVideoSources,
 	encodeSourceForPermalink,
 	decodeSourceFromPermalink,
+	isAllowedMediaUrl,
 	getIncludeVideosInPermalink,
 	setIncludeVideosInPermalink,
 	defaults,

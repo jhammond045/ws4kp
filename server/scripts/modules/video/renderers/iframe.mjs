@@ -1,3 +1,5 @@
+import { isAllowedMediaUrl } from '../sources.mjs';
+
 class IframeRenderer {
 	constructor(source) {
 		this.source = { ...source };
@@ -8,12 +10,17 @@ class IframeRenderer {
 	async mount(container) {
 		this.container = container;
 		this.container.innerHTML = '';
+		// Throwing lets the display show its "Video unavailable" card.
+		if (!isAllowedMediaUrl(this.source.url)) {
+			throw new Error('Refusing to embed a non-http(s) URL');
+		}
 
 		this.iframe = document.createElement('iframe');
 		this.iframe.className = 'video-renderer__iframe';
 		this.iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
 		this.iframe.allowFullscreen = true;
 		this.iframe.setAttribute('loading', 'lazy');
+		this.iframe.sandbox = 'allow-scripts allow-same-origin allow-presentation allow-popups';
 		this.iframe.title = this.source.title || 'Embedded video';
 		this.iframe.src = this.source.url;
 
@@ -47,8 +54,11 @@ class IframeRenderer {
 
 	update(source) {
 		this.source = { ...source };
-		if (this.iframe) {
+		if (!this.iframe) return;
+		if (isAllowedMediaUrl(this.source.url)) {
 			this.iframe.src = this.source.url;
+		} else {
+			this.iframe.removeAttribute('src');
 		}
 	}
 }
