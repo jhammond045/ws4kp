@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vanilla ES modules, Express 5 (server/proxy mode), gulp + webpack static build, SCSS, GitHub Actions → GitHub Pages. Unit tests use Node's built-in `node:test` (no new deps).
 
-**Spec:** `WORK.md` (embedded video), `docs/OSD.md` (OSD menu). Review evidence for every finding is in the Findings appendix at the end of this file.
+**Spec:** `WORK.md` (embedded video), `docs/OSD.md` (OSD menu). As of this plan's first commit, both are **untracked** in the main working tree; Task 0 commits them. Review evidence for every finding is in the Findings appendix at the end of this file.
 
 ## Global Constraints
 
@@ -49,7 +49,15 @@ Also confirm: **D5** — should "Reset to defaults" also clear video sources? Re
 
 ## Phase 0 — Hotfix the live 6.2.1 site (on `main`)
 
-The uncommitted WIP in `gulp/publish-frontend.mjs` (Prettier reformat + `copyCustomJs`) and `server/scripts/modules/utils/data-loader.mjs` (relative path, Prettier-formatted) is from an earlier session. Task 3 replaces the data-loader change with a lint-clean equivalent; the gulp reformat is dropped (upstream replaces that file). Confirm with the owner before discarding.
+**Owner confirmation needed before Phase 0.** The working tree holds changes from an earlier session or by hand:
+- Uncommitted WIP in `gulp/publish-frontend.mjs` (Prettier reformat + `copyCustomJs`) and `server/scripts/modules/utils/data-loader.mjs` (relative path, Prettier-formatted). Task 3 replaces the data-loader change with a lint-clean equivalent. The gulp reformat gets dropped because upstream replaces that file.
+- `dist/readme.txt` deleted. The cause is unknown; the gulp `clean` task does not delete it.
+- Untracked: `WORK.md`, `docs/OSD.md`, `docs/video-notes.md`, `BUILD_SPA.md`, `DEPLOY_GITHUB_PAGES.md`, `deploy-gh-pages.sh`, `.DS_Store`.
+
+### Task 0: Commit the specs and docs
+
+- [ ] **Step 1:** Once the owner confirms, `git add WORK.md docs/OSD.md docs/video-notes.md BUILD_SPA.md DEPLOY_GITHUB_PAGES.md` (by path), then commit `docs: add video and OSD specs, build and deploy guides`. Leave `deploy-gh-pages.sh` untracked; Task 4 deletes it. Add `.DS_Store` to `.gitignore`.
+- [ ] **Step 2:** Verify `git ls-files WORK.md docs/OSD.md BUILD_SPA.md` lists all three. Task 5 copies these from `main` and fails without them.
 
 ### Task 1: Block unsafe video URL schemes
 
@@ -62,8 +70,13 @@ The uncommitted WIP in `gulp/publish-frontend.mjs` (Prettier reformat + `copyCus
 
 **Interfaces:**
 - Produces: `export const isAllowedMediaUrl = (value: string) => boolean` in `sources.mjs`. True only when `new URL(value).protocol` is `http:` or `https:`. Task 9 and Task 10 reuse it.
+- Produces (test helper, top of `tests/unit/video-sources.test.mjs`): `load(search = '', storage = {}, history = {}) => Promise<module>`. It sets the globals below, then runs `import('../../server/scripts/modules/video/sources.mjs?' + n++)` with a fresh query string so each call re-runs module hydration.
+  - `globalThis.window = { location: { search, href: 'https://e.test/ws4kp/' + search }, history: { replaceState() {}, ...history } }`
+  - `globalThis.localStorage` = an in-memory object seeded from `storage`
+  - `globalThis.btoa` / `atob` (Node has them)
+  - Task 2 reuses this helper.
 
-- [ ] **Step 1: Write the failing test.** Stub `globalThis.window = { location: { search }, history: { replaceState() {} } }` and an in-memory `globalThis.localStorage` before a cache-busted dynamic `import()` of `sources.mjs`.
+- [ ] **Step 1: Write the failing test** using `load()`.
 
 ```js
 test('drops javascript: and data: URLs from permalink', async () => {
@@ -126,7 +139,7 @@ test('hydrating from URL strips video params from the address bar', async () => 
 - Modify: `server/scripts/modules/utils/data-loader.mjs:9` → `` `data/${dataType}.json...` `` (keep the file's tabs/single quotes; this replaces the Prettier WIP)
 - Modify: `server/scripts/modules/radar-tiles.mjs:68` → `` `images/maps/radar/...` ``
 - Modify: `server/manifest.json` → icon `src` values `images/logos/...`, `"start_url": "./"`
-- Restore: `git checkout dist/readme.txt`
+- Restore: `git checkout dist/readme.txt` (after owner confirms; see the Phase 0 note)
 
 - [ ] **Step 1: Build and serve under a subpath.** `npm run build:spa && mkdir -p /tmp/site && rm -rf /tmp/site/ws4kp && cp -R dist /tmp/site/ws4kp && npx http-server /tmp/site -p 7655 -c-1`
 - [ ] **Step 2: Load `http://localhost:7655/ws4kp/`, enter "Chicago, IL", and advance to Local Radar.** Then run `performance.getEntriesByType('resource').filter(e => e.responseStatus >= 400).map(e => e.name)` in the console. Expected: only `scripts/custom.js` (an optional probe). No `/data/`, `/images/maps/radar/`, or manifest 404s. The radar basemap is visible.
@@ -145,7 +158,7 @@ test('hydrating from URL strips video params from the address bar', async () => 
   - add `npm test` and `npm run lint` steps before `Build SPA`
 - Modify: `package.json` (remove `"npm"` from `dependencies`), `package-lock.json` (regenerate)
 - Modify: the five `no-mixed-spaces-and-tabs` sites from lint (`server/scripts/index.mjs:626`, `osd/osdModal.mjs:245`, `video/sources.mjs:370`, `weatherdisplay.mjs:364,519,612`)
-- Delete: `deploy-gh-pages.sh`. Pages uses `build_type: workflow`, so the gh-pages branch it force-pushes is never served.
+- Delete: `deploy-gh-pages.sh` (untracked, so just `rm` it after the owner confirms). Pages uses `build_type: workflow`, so the gh-pages branch it force-pushes is never served.
 - Modify: `DEPLOY_GITHUB_PAGES.md`. Remove Option B and the gh-pages troubleshooting. Put CNAME in `server/` instead of `dist/`.
 - Modify: `BUILD_SPA.md`. Use port 7654, Node ≥ 20, drop the "SPA fallback route" note, and link fork issues.
 
@@ -234,8 +247,8 @@ Fix list (Findings O1–O10):
 
 **Files:** `server/scripts/modules/currentweatherscroll.mjs` (`:204`, `:213`, `:236` on 8.0.1), `server/scripts/index.mjs`, `server/scripts/modules/hazards.mjs`
 
-- [ ] **Step 1: Failing check.** Load with upstream's custom scroll text param set to `<img src=x onerror="window.__s=1">`. Expected now: `window.__s === 1`.
-- [ ] **Step 2: Switch those three `innerHTML` writes of text to `textContent`.** Keep any intentional markup as DOM nodes. Re-run: `window.__s` stays undefined and the text shows literally. This sink is also present upstream; offer the fix there.
+- [ ] **Step 1: Regression check.** Upstream 8.0.1 escapes custom scroll text (`custom-scroll-text.mjs:41`, `escapeHtml`), and the port drops the fork's `custom-rss-feed.mjs`. Load the port with upstream's custom scroll text param set to `<img src=x onerror="window.__s=1">`. Expected: `window.__s` stays undefined and the text shows literally. Run this before Task 6's PR merges.
+- [ ] **Step 2: Fix only if Step 1 fails or the OSD adds a new text source.** Escape at the source the same way upstream does, with `escapeHtml`.
 - [ ] **Step 3: Check the integration findings (I1–I5) on the port and fix any that survive.**
   - Location Reset throws on missing `#span*`.
   - Refresh while paused leaves a blank screen (progress lookup).
@@ -359,7 +372,7 @@ All findings are from the 2026-10-20 review. Severity: 🔴 broken/security, �
 | I3 | 🔴 | `navigation.mjs:818` | `#enabledDisplays` removed, so permalinked screen on/off params are ignored. | 6, 8 |
 | I4 | 🟡 | `hazards.mjs:61` | New-alert "!!!" badge never shows. | 8 |
 | I5 | 🟡 | `custom-rss-feed.mjs:132` | Custom feed never applied on load and not in the OSD. Upstream replaced it with `custom-scroll-text.mjs`. | 6 |
-| I6 | 🟡 | `currentweatherscroll.mjs:204,225` | Feed and scroll text go into `innerHTML`, so script runs via a crafted feed or link. Still present upstream. | 8 |
+| I6 | 🟡 | `currentweatherscroll.mjs:204,225` | Fork RSS feed text goes into `innerHTML` unescaped, so script runs via a crafted feed or link. Upstream escapes its replacement (`escapeHtml`), so the port fixes this; Task 8 checks for regressions. | 6, 8 |
 | I7 | 🟡 | `navigation.mjs:742` | `crtStrength=0` from a link becomes 50 (`\|\|` instead of `??`). Moot if D2 drops CRT. | 6 |
 | I8 | 🔵 | `index.mjs:170` | Dev server exposes `/src` over HTTP. | 6 |
 | I9 | 🔵 | `_page.scss:608`, `cache.mjs:4`, `index.ejs:238` | Dead rule, dead function, and the Refresh button uses the menu icon. | 6 |
