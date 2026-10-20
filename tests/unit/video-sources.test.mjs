@@ -72,6 +72,12 @@ test('permalink encoding never emits an unsafe URL', async () => {
 	assert.equal(decodeSourceFromPermalink(encoded).url, '');
 });
 
+test('decodes old Latin-1 permalinks', async () => {
+	const { decodeSourceFromPermalink } = await load('');
+	const old = btoa(JSON.stringify({ t: 'Café', u: 'https://e.test/a.m3u8', d: 20 })).replace(/=+$/, '');
+	assert.equal(decodeSourceFromPermalink(old).title, 'Café');
+});
+
 test('permalink round-trips non-Latin-1 titles', async () => {
 	const { encodeSourceForPermalink, decodeSourceFromPermalink } = await load('');
 	const enc = encodeSourceForPermalink({ title: 'Traffic – Downtown 🚗', url: 'https://e.test/a.m3u8', durationSec: 20 });

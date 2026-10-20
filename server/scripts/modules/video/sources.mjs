@@ -203,7 +203,12 @@ const base64UrlDecode = (value) => {
 	const paddedValue = `${padded}${'='.repeat(paddingLength)}`;
 	const binary = atob(paddedValue);
 	const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-	return new TextDecoder().decode(bytes);
+	try {
+		return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+	} catch {
+		// links made before UTF-8 encoding used raw btoa (Latin-1)
+		return binary;
+	}
 };
 
 const decodeCompactValue = (value) => {
