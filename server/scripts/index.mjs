@@ -15,6 +15,7 @@ import { debugFlag } from './modules/utils/debug.mjs';
 import { parseQueryString } from './modules/utils/setting.mjs';
 import { Settings } from './vendor/auto/luxon.mjs';
 import { resize, isIOS } from './modules/utils/scaling.mjs';
+import createOsdMenu from './modules/osd/osdMenu.mjs';
 
 // set luxon's default locale to en-US as the forecast text and other hard coded assets are only available in English
 Settings.defaultLocale = 'en-US';
@@ -56,6 +57,7 @@ const init = async () => {
 		e.target.select();
 	});
 
+	document.querySelector('#NavigateSetup').addEventListener('click', btnNavigateSetupClick);
 	document.querySelector('#NavigateMenu').addEventListener('click', btnNavigateMenuClick);
 	document.querySelector('#NavigateRefresh').addEventListener('click', btnNavigateRefreshClick);
 	document.querySelector('#NavigateNext').addEventListener('click', btnNavigateNextClick);
@@ -337,6 +339,35 @@ const fullscreenChanged = () => {
 
 const btnNavigateMenuClick = () => {
 	sendNavButtonMessage('navButton', 'menu');
+	return false;
+};
+
+// the OSD menu is created on first use
+let osdMenuController = null;
+const toggleOsdMenu = () => {
+	if (!osdMenuController) {
+		try {
+			osdMenuController = createOsdMenu({
+				settings,
+				navigation: {
+					isPlaying,
+					sendCommand: (command) => sendNavButtonMessage('navButton', command),
+				},
+			});
+		} catch (error) {
+			console.error('Failed to initialize OSD menu', error);
+			return;
+		}
+	}
+	if (osdMenuController.isOpen?.()) {
+		osdMenuController.close();
+	} else {
+		osdMenuController.open();
+	}
+};
+
+const btnNavigateSetupClick = () => {
+	toggleOsdMenu();
 	return false;
 };
 

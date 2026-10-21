@@ -1,0 +1,32 @@
+<div
+  id="ws-osd-modal-root"
+  class="ws-osd-modal"
+  aria-hidden="true"
+  data-osd-modal-state="closed"
+>
+  <div class="ws-osd-modal__backdrop" aria-hidden="true"></div>
+  <div
+    class="ws-osd-modal__panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="ws-osd-modal-title"
+  >
+    <button
+      type="button"
+      class="ws-osd-modal__close-btn"
+      aria-label="Close"
+      data-osd-modal-close
+    >
+      ×
+    </button>
+    <div class="ws-osd-modal__title" id="ws-osd-modal-title">
+      --------- MODAL ---------
+    </div>
+    <div class="ws-osd-modal__body" data-osd-modal-slot="body"></div>
+    <div
+      class="ws-osd-modal__actions"
+      role="group"
+      data-osd-modal-slot="actions"
+    ></div>
+  </div>
+</div>

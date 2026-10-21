@@ -118,10 +118,13 @@
           <%- include('partials/hazards.ejs') %>
         </div>
         <%- include('partials/scroll.ejs') %>
+        <%- include('partials/osd-menu.html') %>
+        <%- include('partials/osd-modal.html') %>
       </div>
     </div>
     <div id="divTwcBottom">
       <div id="divTwcBottomLeft">
+        <button type="button" id="NavigateSetup" class="navButton" title="Setup" aria-label="Setup"><img src="images/nav/ic_settings_white_24dp.svg" alt="" /></button>
         <button type="button" id="NavigateMenu" class="navButton" title="Menu" aria-label="Menu"><img src="images/nav/ic_menu_white_24dp_2x.png" alt="" /></button>
         <button type="button" id="NavigatePrevious" class="navButton" title="Previous" aria-label="Previous"><img src="images/nav/ic_skip_previous_white_24dp_2x.png" alt="" /></button>
         <button type="button" id="NavigateNext" class="navButton" title="Next" aria-label="Next"><img src="images/nav/ic_skip_next_white_24dp_2x.png" alt="" /></button>

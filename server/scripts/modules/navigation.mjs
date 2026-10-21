@@ -283,6 +283,13 @@ const registerDisplay = (display) => {
 	displays[display.navId] = display;
 };
 
+// remove a display that was registered at runtime (video displays), trimming empty slots from the end
+const unregisterDisplay = (display) => {
+	if (displays[display.navId] !== display) return;
+	delete displays[display.navId];
+	while (displays.length > 0 && !displays[displays.length - 1]) displays.pop();
+};
+
 const generateCheckboxes = () => {
 	const availableDisplays = document.querySelector('#enabledDisplays');
 
@@ -340,6 +347,7 @@ export {
 	resetStatuses,
 	isPlaying,
 	registerDisplay,
+	unregisterDisplay,
 	registerProgress,
 	currentDisplay,
 	showDisplay,

@@ -21,4 +21,6 @@ import './modules/settings.mjs';
 import './modules/media.mjs';
 import './modules/custom-scroll-text.mjs';
 // eslint-disable-next-line import-x/no-useless-path-segments
+import './modules/video/index.mjs';
+// eslint-disable-next-line import-x/no-useless-path-segments
 import './index.mjs';

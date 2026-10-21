@@ -1,0 +1,49 @@
+<div id="ws-osd-root" class="ws-osd" aria-hidden="true" data-osd-state="closed">
+  <div
+    class="ws-osd__panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="ws-osd-title"
+  >
+    <div class="ws-osd__title" id="ws-osd-title">--------- MENU ---------</div>
+    <button
+      type="button"
+      class="ws-osd__close-btn"
+      aria-label="Close menu"
+      title="Close menu (ESC)"
+    >
+      ✕
+    </button>
+    <div class="ws-osd__columns">
+      <div
+        class="ws-osd__categories"
+        role="listbox"
+        aria-label="Menu categories"
+      >
+        <div
+          class="ws-osd__focus"
+          data-osd-focus="categories"
+          aria-hidden="true"
+        ></div>
+        <div class="ws-osd__list" data-osd-slot="categories"></div>
+      </div>
+      <div class="ws-osd__items" role="listbox" aria-label="Menu items">
+        <div
+          class="ws-osd__focus"
+          data-osd-focus="items"
+          aria-hidden="true"
+        ></div>
+        <div class="ws-osd__list" data-osd-slot="items"></div>
+        <div
+          class="ws-osd__pagination"
+          data-osd-slot="pagination"
+          aria-hidden="true"
+        ></div>
+      </div>
+    </div>
+    <div class="ws-osd__legend" aria-hidden="true">
+      SELECT: ▲ ▼&nbsp;&nbsp;&nbsp;ADJUST: ‹ ›&nbsp;&nbsp;&nbsp;ENTER:
+      ACTION&nbsp;&nbsp;&nbsp;BACK: ESC
+    </div>
+  </div>
+</div>
