@@ -221,6 +221,8 @@ class VideoDisplay extends WeatherDisplay {
 			this.skipTurns = 0;
 			this.setStatus(STATUS.loaded);
 			this.updateStatusMessage('');
+			// reloaded after an edit while on screen
+			if (this.active) this.startPlayback();
 		}, (error) => {
 			if (this.loadToken !== token) return;
 			this.fail(error);
@@ -351,6 +353,7 @@ class VideoDisplay extends WeatherDisplay {
 		const inPlace = ['title', 'durationSec', 'preloadSec'];
 		const playerChanged = Object.keys({ ...source, ...this.source })
 			.some((key) => !inPlace.includes(key) && source[key] !== this.source[key]);
+		const urlChanged = source.url !== this.source.url;
 		this.source = { ...source };
 		this.mode = nextMode;
 		this.buildTiming();
@@ -361,7 +364,8 @@ class VideoDisplay extends WeatherDisplay {
 			if (this.failed || this.loading) this.load();
 			return;
 		}
-		if (modeChanged || !this.player || !this.player.update) {
+		// a new URL loads like the first time, with the same timeout and unavailable card
+		if (modeChanged || urlChanged || !this.player || !this.player.update) {
 			this.load();
 			return;
 		}

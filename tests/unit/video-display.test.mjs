@@ -182,3 +182,19 @@ test('iframes from this site lose allow-same-origin', () => {
 	assert.ok(!iframeSandbox('not a url', 'https://e.test').includes('allow-same-origin'));
 	assert.ok(!iframeSandbox('about:blank', 'https://e.test').includes('allow-same-origin'));
 });
+
+test('a new URL on a loaded display loads again with the load timeout', async () => {
+	const display = makeDisplay();
+	await display.getData();
+	assert.equal(constructed, 1);
+	mountResult = () => new Promise(() => {});
+	display.updateSource({ ...display.source, url: 'https://e.test/dead' });
+	assert.equal(constructed, 2);
+	assert.equal(display.status, STATUS.loading);
+	const { loading } = display;
+	mock.timers.tick(10_000);
+	await loading;
+	assert.equal(display.status, STATUS.failed);
+	assert.equal(display.statusContainer.textContent, 'VIDEO UNAVAILABLE');
+	display.dispose();
+});
