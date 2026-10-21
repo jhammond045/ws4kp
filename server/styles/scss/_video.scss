@@ -2,10 +2,6 @@
 @use 'shared/_utils' as u;
 
 .video-display-root {
-	.display--video {
-		background-image: url('../images/backgrounds/1.png');
-	}
-
 	.ws-body--video {
 		position: relative;
 		margin: 0;

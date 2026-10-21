@@ -89,17 +89,14 @@ class VideoDisplay extends WeatherDisplay {
 		this.elem.classList.add('video-display-root');
 		this.elem.innerHTML = '';
 
-		const display = document.createElement('div');
-		display.className = 'display display--video';
-		display.dataset.display = 'video';
-
 		const header = document.createElement('div');
 		header.className = 'header';
 
 		const logo = document.createElement('div');
 		logo.className = 'logo';
 		const logoImg = document.createElement('img');
-		logoImg.src = 'images/logos/logo-corner.png';
+		logoImg.src = 'images/logos/logo-corner.svg';
+		logoImg.width = 85;
 		logo.append(logoImg);
 
 		this.titleElem = document.createElement('div');
@@ -131,8 +128,8 @@ class VideoDisplay extends WeatherDisplay {
 		frame.append(this.statusContainer);
 		body.append(frame);
 
-		display.append(header, body);
-		this.elem.append(display);
+		// header must be a direct child of .weather-display for upstream's >.header rules
+		this.elem.append(header, body);
 
 		this.updateHeader();
 		this.updateStatusMessage('Preparing video…');
