@@ -94,7 +94,7 @@ test('a mount that never resolves fails after preloadSec + 5 seconds', async () 
 	display.dispose();
 });
 
-test('two failures in a row take the display out of rotation until a load succeeds', async () => {
+test('two failures in a row sit out two turns, then the source loads again', async () => {
 	mountResult = () => Promise.reject(new Error('404'));
 	const display = makeDisplay();
 	await display.getData();
@@ -102,10 +102,38 @@ test('two failures in a row take the display out of rotation until a load succee
 	assert.equal(display.isEnabledForRotation(), true);
 	await display.getData();
 	assert.equal(display.isEnabledForRotation(), false);
+	// a data refresh while sitting out doesn't load it early
+	await display.getData(undefined, true);
+	assert.equal(constructed, 2);
+	assert.equal(display.status, STATUS.failed);
+	display.skippedTurn();
+	assert.equal(constructed, 2);
+	assert.equal(display.isEnabledForRotation(), false);
 	mountResult = () => Promise.resolve();
-	await display.getData();
+	display.skippedTurn();
+	assert.equal(constructed, 3);
+	await display.loading;
 	assert.equal(display.status, STATUS.loaded);
 	assert.equal(display.isEnabledForRotation(), true);
+	display.dispose();
+});
+
+test('a retry that fails again sits out another two turns', async () => {
+	mountResult = () => Promise.reject(new Error('404'));
+	const display = makeDisplay();
+	await display.getData();
+	await display.getData();
+	display.skippedTurn();
+	display.skippedTurn();
+	await display.loading;
+	assert.equal(constructed, 3);
+	assert.equal(display.status, STATUS.failed);
+	assert.equal(display.isEnabledForRotation(), false);
+	display.skippedTurn();
+	assert.equal(constructed, 3);
+	display.skippedTurn();
+	assert.equal(constructed, 4);
+	await display.loading;
 	display.dispose();
 });
 

@@ -10,8 +10,9 @@ const DEFAULT_TITLE = 'Video';
 const MAX_TITLE_LENGTH = 18;
 // a source that hasn't loaded within its preload lead time plus this many seconds is shown as unavailable
 const LOAD_TIMEOUT_EXTRA_SEC = 5;
-// after this many failed loads in a row the source is left out of rotation until a load succeeds
+// after this many failed loads in a row the source sits out SKIP_TURNS turns, then loads again
 const MAX_FAILURES = 2;
+const SKIP_TURNS = 2;
 const UNAVAILABLE_MESSAGE = 'VIDEO UNAVAILABLE';
 const preconnectedOrigins = new Set();
 
@@ -57,6 +58,8 @@ class VideoDisplay extends WeatherDisplay {
 		this.ready = false;
 		this.failed = false;
 		this.failureCount = 0;
+		// turns left to sit out after repeated failures, see skippedTurn
+		this.skipTurns = 0;
 		this.lastError = null;
 		this.loading = null;
 		this.loadToken = null;
@@ -184,6 +187,11 @@ class VideoDisplay extends WeatherDisplay {
 			this.setStatus(STATUS.loaded);
 			return;
 		}
+		// sitting out after failures, skippedTurn loads it again when its turns are up
+		if (this.skipTurns > 0) {
+			this.setStatus(STATUS.failed);
+			return;
+		}
 		if (this.loading) {
 			await this.loading;
 			return;
@@ -210,6 +218,7 @@ class VideoDisplay extends WeatherDisplay {
 			if (this.loadToken !== token) return;
 			this.ready = true;
 			this.failureCount = 0;
+			this.skipTurns = 0;
 			this.setStatus(STATUS.loaded);
 			this.updateStatusMessage('');
 		}, (error) => {
@@ -230,6 +239,7 @@ class VideoDisplay extends WeatherDisplay {
 		this.failed = true;
 		this.lastError = error;
 		this.failureCount += 1;
+		if (this.failureCount >= MAX_FAILURES) this.skipTurns = SKIP_TURNS;
 		console.error(`Video "${this.source.title}" unavailable: ${error?.message}`);
 		this.disposePlayer();
 		this.setStatus(STATUS.failed);
@@ -238,7 +248,15 @@ class VideoDisplay extends WeatherDisplay {
 
 	// a failed source is still shown, so the card appears, until it fails twice in a row
 	isEnabledForRotation() {
-		return this.failureCount < MAX_FAILURES;
+		return this.skipTurns === 0;
+	}
+
+	// navigation calls this when rotation moves past this display without showing it
+	// a source sitting out after failures loads again once it has missed its turns
+	skippedTurn() {
+		if (this.skipTurns === 0 || !this.failed) return;
+		this.skipTurns -= 1;
+		if (this.skipTurns === 0) this.load();
 	}
 
 	async preparePlayer() {

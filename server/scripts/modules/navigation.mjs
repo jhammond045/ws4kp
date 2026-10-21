@@ -179,6 +179,14 @@ const loadDisplay = (direction) => {
 		return;
 	}
 
+	// going forward, every display between the old and the new one missed its turn
+	// a video that is sitting out after failures counts these to know when to try again
+	if (direction > 0) {
+		for (let i = wrap(curIdx + 1, totalDisplays); i !== idx; i = wrap(i + 1, totalDisplays)) {
+			displays[i]?.skippedTurn?.();
+		}
+	}
+
 	const newDisplay = displays[idx];
 	// hide all displays
 	hideAllCanvases();
