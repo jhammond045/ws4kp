@@ -70,6 +70,8 @@ class VideoDisplay extends WeatherDisplay {
 		this.prewarmed = false;
 		// true while a YouTube source plays as a plain embed, see fallBackOrFail
 		this.fallback = false;
+		// true when that embed is up because YouTube refused the video, which counts as a failure
+		this.refusedFallback = false;
 		this.disposed = false;
 		this.buildTiming();
 		this.prewarmTimeout = null;
@@ -229,6 +231,7 @@ class VideoDisplay extends WeatherDisplay {
 		const token = {};
 		this.loadToken = token;
 		this.fallback = fallback;
+		if (!fallback) this.refusedFallback = false;
 		this.ready = false;
 		this.failed = false;
 		this.lastError = null;
@@ -249,7 +252,7 @@ class VideoDisplay extends WeatherDisplay {
 		]).then(() => {
 			if (this.loadToken !== token) return;
 			this.ready = true;
-			this.failureCount = 0;
+			if (!this.refusedFallback) this.failureCount = 0;
 			this.skipTurns = 0;
 			if (this.status !== STATUS.loaded) this.setStatus(STATUS.loaded);
 			this.updateStatusMessage('');
@@ -273,11 +276,24 @@ class VideoDisplay extends WeatherDisplay {
 	// WORK.md 7: when YouTube refuses the embed (101/150), its API doesn't load or the player doesn't get ready in time,
 	// try a plain embed once before showing the card
 	// the plain embed can't report errors, so for 101/150 it shows YouTube's own error page instead of the card
+	// YouTube now also refuses (150) missing and private videos, and the plain embed then shows its own error page,
+	// so a refusal counts as a failure even when the embed loads: the second one in a row shows the card and
+	// the source sits out like any other failing source
 	fallBackOrFail(error) {
+		if (error?.refused && !this.fallback && this.failureCount + 1 >= MAX_FAILURES) {
+			this.fail(error);
+			return undefined;
+		}
 		if (this.mode === 'youtube' && !this.fallback && (error?.fallback || error?.timedOut)) {
+			if (error?.refused) {
+				this.failureCount += 1;
+				this.refusedFallback = true;
+			}
 			console.warn(`Video "${this.source.title}": ${error.message}, trying a plain embed`);
 			return this.load({ fallback: true });
 		}
+		// the refusal before this plain embed already counted for this turn
+		if (this.fallback && this.refusedFallback) this.failureCount -= 1;
 		this.fail(error);
 		return undefined;
 	}

@@ -144,6 +144,8 @@ class YouTubeRenderer {
 					onError: (error) => {
 						const failure = new Error(`YouTube player error: ${error.data}`);
 						failure.fallback = EMBED_REFUSED.has(error.data);
+						// a missing or private video also reports 150 now, see VideoDisplay.fallBackOrFail
+						failure.refused = failure.fallback;
 						// a removed or private video often errors after it reports ready
 						if (this.isReady) {
 							this.onFail?.(failure);

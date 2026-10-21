@@ -442,3 +442,21 @@ test('a video display built after the page loaded leaves no DOMContentLoaded lis
 		delete document.removeEventListener;
 	}
 });
+
+test('a video YouTube refuses gets the plain embed once, then the card, then sits out', async () => {
+	const made = withYouTubeStub(() => Promise.reject(Object.assign(new Error('YouTube player error: 150'), { fallback: true, refused: true })));
+	const display = makeDisplay(youtubeSource);
+	// first turn: the plain embed loads, but the refusal counts
+	await turn(display);
+	assert.equal(display.fallback, true);
+	assert.equal(display.ready, true);
+	assert.equal(display.failureCount, 1);
+	display.releasePlayer();
+	// second turn: the card, and the source sits out two turns
+	await turn(display);
+	assert.equal(display.status, STATUS.failed);
+	assert.equal(display.isEnabledForRotation(), false);
+	assert.equal(made.length, 2);
+	assert.equal(constructed, 1);
+	display.dispose();
+});
