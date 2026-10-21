@@ -415,3 +415,13 @@ test('HLS plays through hls.js wherever Media Source Extensions exist, natively 
 	assert.equal(chooseHlsPlayback({ mediaSource: false, native: true }), 'native');
 	assert.equal(chooseHlsPlayback({ mediaSource: false, native: false }), null);
 });
+
+test('the header title swaps dashes the font lacks and cuts long titles by character', () => {
+	const display = makeDisplay({ title: 'Traffic – Downtown' });
+	assert.equal(display.displayTitle, 'Traffic - Downtown');
+	display.updateSource({ ...display.source, title: 'Traffic – Downtown 🚗' });
+	assert.equal(display.displayTitle, 'Traffic - Downtow…');
+	display.updateSource({ ...display.source, title: '雨雨雨雨雨雨雨雨雨雨雨雨雨雨雨雨🚗🚗東京' });
+	assert.equal(display.displayTitle, '雨雨雨雨雨雨雨雨雨雨雨雨雨雨雨雨🚗…');
+	display.dispose();
+});

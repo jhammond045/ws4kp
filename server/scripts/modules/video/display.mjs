@@ -41,12 +41,13 @@ const playableSource = (source) => (source.endAt !== null && source.endAt !== un
 	? { ...source, endAt: null }
 	: source);
 
+// the header font has no en or em dash, and a long title is cut with an ellipsis (by character, so emoji stay whole)
 const formatDisplayTitle = (title) => {
 	if (typeof title !== 'string') return DEFAULT_TITLE;
-	const trimmed = title.trim();
-	if (!trimmed) return DEFAULT_TITLE;
-	if (trimmed.length <= MAX_TITLE_LENGTH) return trimmed;
-	return `${trimmed.slice(0, MAX_TITLE_LENGTH - 1).trimEnd()}…`;
+	const characters = [...title.trim().replace(/[\u2013\u2014]/g, '-')];
+	if (characters.length === 0) return DEFAULT_TITLE;
+	if (characters.length <= MAX_TITLE_LENGTH) return characters.join('');
+	return `${characters.slice(0, MAX_TITLE_LENGTH - 1).join('').trimEnd()}…`;
 };
 
 class VideoDisplay extends WeatherDisplay {

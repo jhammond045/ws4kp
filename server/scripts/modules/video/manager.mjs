@@ -380,7 +380,8 @@ const renderSourceCard = (state, source, index) => {
 		renderTextField(state, source, 'Title', 'title', 'text', {
 			placeholder: 'Display title',
 			span: 'quarter',
-			maxlength: 16,
+			// the header shows the first 18 characters and an ellipsis
+			maxlength: 40,
 		}),
 		renderTextField(state, source, 'URL', 'url', 'url', {
 			placeholder: 'https://…',
