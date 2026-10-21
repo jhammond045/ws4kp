@@ -248,11 +248,19 @@ test('YouTube refusing the embed tries a plain embed once before the card', asyn
 
 test('a working plain embed fallback is shown, and the next edit tries YouTube again', async () => {
 	const made = withYouTubeStub(() => Promise.reject(Object.assign(new Error('Failed to load YouTube API script'), { fallback: true })));
+	let paused = 0;
+	RENDERERS.iframe = class extends StubRenderer {
+		// eslint-disable-next-line class-methods-use-this
+		pause() { paused += 1; }
+	};
 	const display = makeDisplay(youtubeSource);
 	await display.getData();
 	assert.equal(display.status, STATUS.loaded);
 	assert.equal(display.fallback, true);
 	assert.equal(constructed, 1);
+	// off screen the autoplaying embed is blanked until its turn
+	assert.equal(paused, 1);
+	RENDERERS.iframe = StubRenderer;
 	display.updateSource({ ...display.source, muted: false });
 	await display.loading;
 	assert.equal(made.length, 2);

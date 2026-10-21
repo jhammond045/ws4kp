@@ -229,7 +229,12 @@ class VideoDisplay extends WeatherDisplay {
 			this.setStatus(STATUS.loaded);
 			this.updateStatusMessage('');
 			// reloaded after an edit while on screen
-			if (this.active) this.startPlayback();
+			if (this.active) {
+				this.startPlayback();
+			} else if (this.fallback) {
+				// the plain YouTube embed autoplays, blank it until its turn so it's never heard off screen
+				this.pausePlayback();
+			}
 		}, (error) => {
 			if (this.loadToken !== token) return undefined;
 			return this.fallBackOrFail(error);
