@@ -61,6 +61,17 @@ const TXT_ADDRESS_SELECTOR = '#txtLocation';
 const TOGGLE_FULL_SCREEN_SELECTOR = '#ToggleFullScreen';
 const BTN_GET_GPS_SELECTOR = '#btnGetGps';
 
+// {lat, lon} from a link or saved value, or null when it isn't a location (a broken link, ?latLon=null)
+const parseLatLon = (value) => {
+	if (!value) return null;
+	try {
+		const { lat, lon } = JSON.parse(value) ?? {};
+		return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+	} catch {
+		return null;
+	}
+};
+
 const init = async () => {
 	document.querySelector(TXT_ADDRESS_SELECTOR).addEventListener('focus', (e) => {
 		e.target.select();
@@ -135,18 +146,20 @@ const init = async () => {
 
 	// attempt to parse the url parameters
 	const parsedParameters = parseQueryString();
-	const loadFromParsed = !!parsedParameters.latLon;
+	// a link's latLon that isn't a location is ignored, its latLonQuery or the saved location is used instead
+	const linkLatLon = parseLatLon(parsedParameters.latLon);
+	const loadFromParsed = !!linkLatLon;
 
 	// Auto load the parsed parameters and fall back to the previous query
 	const query = parsedParameters.latLonQuery ?? localStorage.getItem('latLonQuery');
-	const latLon = parsedParameters.latLon ?? localStorage.getItem('latLon');
+	const latLon = linkLatLon ?? parseLatLon(localStorage.getItem('latLon'));
 	// a location from a link replaces the saved one, and GPS, the same as a location entered here
 	// GPS is turned off only once the link's location is found, a link that can't be found leaves it on
 	const linkHasLocation = loadFromParsed || !!parsedParameters.latLonQuery;
 	// compared to the string, earlier versions could store 'false'
 	let fromGPS = localStorage.getItem('latLonFromGPS') === 'true' && !linkHasLocation;
 
-	if (parsedParameters.latLonQuery && !parsedParameters.latLon) {
+	if (parsedParameters.latLonQuery && !loadFromParsed) {
 		const txtAddress = document.querySelector(TXT_ADDRESS_SELECTOR);
 		txtAddress.value = parsedParameters.latLonQuery;
 		const geometry = await findLocation({ text: parsedParameters.latLonQuery });
@@ -164,8 +177,8 @@ const init = async () => {
 			txtAddress.value = query;
 		}
 		// use lat-long lookup if that's all that was provided in the query string
-		if (loadFromParsed && parsedParameters.latLon && !parsedParameters.latLonQuery) {
-			const { lat, lon } = JSON.parse(latLon);
+		if (loadFromParsed && !parsedParameters.latLonQuery) {
+			const { lat, lon } = latLon;
 			// the location is saved, and removed from the address, once the weather service knows it
 			// a link that fails keeps it in the address, so a refresh tries again
 			getForecastFromLatLon(lat, lon, false, () => {
@@ -174,15 +187,14 @@ const init = async () => {
 			});
 		} else {
 			// otherwise use pre-stored data, or the link's location which is saved like one entered here
-			const parsedLatLon = JSON.parse(latLon);
-			const { lat, lon } = parsedLatLon ?? {};
-			if (loadFromParsed && Number.isFinite(lat) && Number.isFinite(lon)) {
+			const { lat, lon } = latLon;
+			if (loadFromParsed) {
 				localStorage.removeItem('latLonFromGPS');
 				localStorage.setItem('latLonQuery', query);
 				localStorage.setItem('latLon', JSON.stringify({ lat, lon }));
 				adoptParams('latLon', 'latLonQuery');
 			}
-			loadData(parsedLatLon);
+			loadData(latLon);
 		}
 	}
 	if (fromGPS) {
