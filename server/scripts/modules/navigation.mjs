@@ -207,6 +207,28 @@ const showDisplay = (display) => {
 	display.showCanvas(msg.command.firstFrame);
 };
 
+// called when a display is shown and on each of its base ticks
+// the next display in rotation gets ready for its turn (a video mounts its player about preloadSec ahead)
+// and every other video lets go of its player, so only the one on screen and the next one are mounted
+const prepareNextDisplay = (current) => {
+	const curIdx = displays.indexOf(current);
+	if (curIdx < 0) return;
+	let next;
+	for (let i = 1; i <= displays.length && !next; i += 1) {
+		const display = displays[wrap(curIdx + i, displays.length)];
+		if (canRotate(display)) next = display;
+	}
+	displays.forEach((display) => {
+		if (display !== current && display !== next) display.releasePlayer?.();
+	});
+	if (!next?.prewarm || next === current || !current.timing?.fullDelay) return;
+	const tickMs = current.timing.baseDelay * settings.speed.value;
+	const remainingMs = (current.timing.fullDelay.at(-1) - current.navBaseCount) * tickMs;
+	// wait while the next tick still leaves the next display its full lead time
+	if (remainingMs - tickMs >= next.prewarmLeadMs) return;
+	next.prewarm();
+};
+
 // get the current display index or value
 const currentDisplayIndex = () => displays.findIndex((display) => display.active);
 const currentDisplay = () => displays[currentDisplayIndex()];
@@ -380,6 +402,7 @@ export {
 	showDisplay,
 	getDisplay,
 	getDisplays,
+	prepareNextDisplay,
 	startDisplays,
 	msg,
 	message,

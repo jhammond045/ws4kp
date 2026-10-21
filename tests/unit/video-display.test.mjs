@@ -75,18 +75,69 @@ const makeDisplay = (source = {}) => {
 	return display;
 };
 
+// what navigation does before a source's turn: a new turn may prewarm again (showCanvas clears this flag)
+const turn = async (display) => {
+	display.prewarmed = false;
+	display.prewarm();
+	await display.loading;
+};
+
 beforeEach(() => {
 	constructed = 0;
 	mountResult = () => Promise.resolve();
 });
 
+test('data loading mounts nothing, a prewarm mounts the player once per turn', async () => {
+	const display = makeDisplay();
+	display.getData();
+	assert.equal(constructed, 0);
+	assert.equal(display.status, STATUS.loaded);
+	display.prewarm();
+	display.prewarm();
+	await display.loading;
+	display.prewarm();
+	assert.equal(constructed, 1);
+	assert.equal(display.ready, true);
+	display.dispose();
+});
+
+test('releasing a player that is not on screen disposes it, and the next turn mounts it again', async () => {
+	let disposed = 0;
+	RENDERERS.iframe = class extends StubRenderer {
+		// eslint-disable-next-line class-methods-use-this
+		dispose() { disposed += 1; }
+	};
+	const display = makeDisplay();
+	display.getData();
+	await turn(display);
+	display.releasePlayer();
+	assert.equal(disposed, 1);
+	assert.equal(display.player, null);
+	assert.equal(display.ready, false);
+	// a load still in progress is dropped too, and can't mark the display ready later
+	mountResult = () => new Promise(() => {});
+	display.prewarm();
+	assert.equal(constructed, 2);
+	display.releasePlayer();
+	assert.equal(display.loading, null);
+	assert.equal(disposed, 2);
+	mountResult = () => Promise.resolve();
+	await turn(display);
+	assert.equal(constructed, 3);
+	assert.equal(display.ready, true);
+	display.dispose();
+	RENDERERS.iframe = StubRenderer;
+});
+
 test('a mount that never resolves fails after preloadSec + 5 seconds', async () => {
 	mountResult = () => new Promise(() => {});
 	const display = makeDisplay();
-	const loading = display.getData();
+	display.getData();
+	display.prewarm();
+	const { loading } = display;
 	mock.timers.tick(9_999);
 	await Promise.resolve();
-	assert.equal(display.status, STATUS.loading);
+	assert.equal(display.failed, false);
 	mock.timers.tick(1);
 	await loading;
 	assert.equal(display.status, STATUS.failed);
@@ -97,20 +148,25 @@ test('a mount that never resolves fails after preloadSec + 5 seconds', async () 
 test('two failures in a row sit out two turns, then the source loads again', async () => {
 	mountResult = () => Promise.reject(new Error('404'));
 	const display = makeDisplay();
-	await display.getData();
+	display.getData();
+	await turn(display);
 	assert.equal(display.status, STATUS.failed);
 	assert.equal(display.isEnabledForRotation(), true);
-	await display.getData();
+	await turn(display);
 	assert.equal(display.isEnabledForRotation(), false);
-	// a data refresh while sitting out doesn't load it early
-	await display.getData(undefined, true);
+	// a data refresh or a prewarm while sitting out doesn't load it early
+	display.getData(undefined, true);
+	display.prewarm();
 	assert.equal(constructed, 2);
 	assert.equal(display.status, STATUS.failed);
 	display.skippedTurn();
-	assert.equal(constructed, 2);
 	assert.equal(display.isEnabledForRotation(), false);
 	mountResult = () => Promise.resolve();
 	display.skippedTurn();
+	// skipping mounts nothing, the source loads again when its next turn is close
+	assert.equal(constructed, 2);
+	assert.equal(display.isEnabledForRotation(), true);
+	display.prewarm();
 	assert.equal(constructed, 3);
 	await display.loading;
 	assert.equal(display.status, STATUS.loaded);
@@ -121,17 +177,19 @@ test('two failures in a row sit out two turns, then the source loads again', asy
 test('a retry that fails again sits out another two turns', async () => {
 	mountResult = () => Promise.reject(new Error('404'));
 	const display = makeDisplay();
-	await display.getData();
-	await display.getData();
+	display.getData();
+	await turn(display);
+	await turn(display);
 	display.skippedTurn();
 	display.skippedTurn();
+	display.prewarm();
 	await display.loading;
 	assert.equal(constructed, 3);
 	assert.equal(display.status, STATUS.failed);
 	assert.equal(display.isEnabledForRotation(), false);
 	display.skippedTurn();
-	assert.equal(constructed, 3);
 	display.skippedTurn();
+	display.prewarm();
 	assert.equal(constructed, 4);
 	await display.loading;
 	display.dispose();
@@ -148,8 +206,9 @@ test('dispose leaves no intervals running', async () => {
 
 test('a refresh keeps the mounted player', async () => {
 	const display = makeDisplay();
-	await display.getData();
-	await display.getData(undefined, true);
+	display.getData();
+	await turn(display);
+	display.getData(undefined, true);
 	assert.equal(constructed, 1);
 	assert.equal(display.status, STATUS.loaded);
 	display.dispose();
@@ -157,7 +216,7 @@ test('a refresh keeps the mounted player', async () => {
 
 test('editing the title updates the display without a new renderer', async () => {
 	const display = makeDisplay();
-	await display.getData();
+	await turn(display);
 	const { player } = display;
 	display.updateSource({ ...display.source, title: 'Lobby' });
 	assert.equal(constructed, 1);
@@ -185,12 +244,12 @@ test('iframes from this site lose allow-same-origin', () => {
 
 test('a new URL on a loaded display loads again with the load timeout', async () => {
 	const display = makeDisplay();
-	await display.getData();
+	await turn(display);
 	assert.equal(constructed, 1);
 	mountResult = () => new Promise(() => {});
 	display.updateSource({ ...display.source, url: 'https://e.test/dead' });
 	assert.equal(constructed, 2);
-	assert.equal(display.status, STATUS.loading);
+	assert.equal(display.ready, false);
 	const { loading } = display;
 	mock.timers.tick(10_000);
 	await loading;
@@ -229,7 +288,7 @@ test('YouTube refusing the embed tries a plain embed once before the card', asyn
 		}
 	};
 	const display = makeDisplay(youtubeSource);
-	const loading = display.getData();
+	const loading = turn(display);
 	// let the YouTube rejection reach the display, setImmediate isn't faked
 	await new Promise((resolve) => { setImmediate(resolve); });
 	assert.equal(made.length, 1);
@@ -254,7 +313,7 @@ test('a working plain embed fallback is shown, and the next edit tries YouTube a
 		pause() { paused += 1; }
 	};
 	const display = makeDisplay(youtubeSource);
-	await display.getData();
+	await turn(display);
 	assert.equal(display.status, STATUS.loaded);
 	assert.equal(display.fallback, true);
 	assert.equal(constructed, 1);
@@ -270,7 +329,7 @@ test('a working plain embed fallback is shown, and the next edit tries YouTube a
 test('a removed YouTube video (error 100) shows the card without a fallback', async () => {
 	withYouTubeStub(() => Promise.reject(Object.assign(new Error('YouTube player error: 100'), { fallback: false })));
 	const display = makeDisplay(youtubeSource);
-	await display.getData();
+	await turn(display);
 	assert.equal(display.status, STATUS.failed);
 	assert.equal(constructed, 0);
 	display.dispose();
@@ -292,8 +351,8 @@ const withHangingIframe = (run) => async () => {
 test('a web page that never fires load still loads', withHangingIframe(async () => {
 	const display = makeDisplay();
 	display.playerContainer.append = () => {};
-	await display.getData();
-	assert.equal(display.status, STATUS.loaded);
+	await turn(display);
+	assert.equal(display.ready, true);
 	display.dispose();
 }));
 
@@ -301,10 +360,10 @@ test('a plain YouTube embed fallback that never fires load times out to the card
 	withYouTubeStub(() => Promise.reject(Object.assign(new Error('YouTube player error: 150'), { fallback: true })));
 	const display = makeDisplay(youtubeSource);
 	display.playerContainer.append = () => {};
-	const loading = display.getData();
+	const loading = turn(display);
 	await new Promise((resolve) => { setImmediate(resolve); });
 	assert.equal(display.fallback, true);
-	assert.equal(display.status, STATUS.loading);
+	assert.equal(display.failed, false);
 	mock.timers.tick(10_000);
 	await loading;
 	assert.equal(display.status, STATUS.failed);
@@ -321,4 +380,28 @@ test('a title from a link is escaped in the name the progress screen writes as H
 	assert.equal(display.name, '&lt;img src=x id=p&gt;');
 	assert.equal(display.displayTitle, '<img src=x id=p>');
 	display.dispose();
+});
+
+test('navigation prewarms the next display within its lead time and releases the other videos', async () => {
+	const { registerDisplay, unregisterDisplay, prepareNextDisplay } = await import('../../server/scripts/modules/navigation.mjs');
+	const { default: settings } = await import('../../server/scripts/modules/settings.mjs');
+	const speed = settings.speed?.value ?? 1;
+	const fake = (extra = {}) => ({
+		navId: -1, status: STATUS.loaded, timing: { totalScreens: 1 }, ...extra,
+	});
+	const calls = [];
+	// on screen for 10 ticks of 1 second at speed 1
+	const current = fake({ timing: { totalScreens: 1, baseDelay: 1000 / speed, fullDelay: [10] }, navBaseCount: 0 });
+	const next = fake({
+		prewarmLeadMs: 5000, prewarm: () => calls.push('prewarm next'), releasePlayer: () => calls.push('release next'),
+	});
+	const later = fake({ releasePlayer: () => calls.push('release later') });
+	[current, next, later].forEach(registerDisplay);
+	prepareNextDisplay(current);
+	assert.deepEqual(calls, ['release later']);
+	// 4 seconds left, the next tick would leave less than the 5 second lead
+	current.navBaseCount = 6;
+	prepareNextDisplay(current);
+	assert.deepEqual(calls, ['release later', 'release later', 'prewarm next']);
+	[current, next, later].forEach(unregisterDisplay);
 });

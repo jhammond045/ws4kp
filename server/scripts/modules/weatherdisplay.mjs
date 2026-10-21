@@ -3,7 +3,7 @@
 import STATUS, { calcStatusClass, statusClasses } from './status.mjs';
 import { DateTime } from '../vendor/auto/luxon.mjs';
 import {
-	msg, displayNavMessage, isPlaying, updateStatus, showDisplay, isLocationActive,
+	msg, displayNavMessage, isPlaying, updateStatus, showDisplay, isLocationActive, prepareNextDisplay,
 } from './navigation.mjs';
 import { parseQueryString, adoptParams } from './utils/setting.mjs';
 import settings from './settings.mjs';
@@ -267,6 +267,7 @@ class WeatherDisplay {
 
 		this.elem.classList.add('show');
 		document.querySelector('#divTwc').classList.add(this.elemId);
+		prepareNextDisplay(this);
 	}
 
 	// a display can be shown on request from the display list when it has something to show
@@ -310,6 +311,7 @@ class WeatherDisplay {
 		// increment the base count
 		this.navBaseCount += 1;
 		logBaseCountTick(this);
+		prepareNextDisplay(this);
 
 		// call base count change if available for this function
 		if (this.baseCountChange) this.baseCountChange(this.navBaseCount);

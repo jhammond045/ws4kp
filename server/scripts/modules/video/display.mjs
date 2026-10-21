@@ -65,6 +65,8 @@ class VideoDisplay extends WeatherDisplay {
 		this.lastError = null;
 		this.loading = null;
 		this.loadToken = null;
+		// a player is mounted just before the source's turn, at most once per turn, see prewarm
+		this.prewarmed = false;
 		// true while a YouTube source plays as a plain embed, see fallBackOrFail
 		this.fallback = false;
 		this.disposed = false;
@@ -182,25 +184,38 @@ class VideoDisplay extends WeatherDisplay {
 		this.statusContainer.dataset.state = error ? 'error' : 'info';
 	}
 
-	async getData(weatherParameters, refresh) {
+	// nothing is mounted here: a player is mounted shortly before the source's turn (prewarm) or when it's shown,
+	// so a long playlist doesn't hold a player for every source
+	// a data refresh leaves a mounted player alone, so the video on screen isn't torn down
+	getData(weatherParameters, refresh) {
 		const superResult = super.getData(weatherParameters, refresh);
 		if (!superResult) return;
+		this.setStatus(this.failed ? STATUS.failed : STATUS.loaded);
+	}
 
-		// a data refresh keeps a working player, so the video on screen isn't torn down
-		if (this.ready && this.player && !this.failed) {
-			this.setStatus(STATUS.loaded);
-			return;
-		}
-		// sitting out after failures, skippedTurn loads it again when its turns are up
-		if (this.skipTurns > 0) {
-			this.setStatus(STATUS.failed);
-			return;
-		}
-		if (this.loading) {
-			await this.loading;
-			return;
-		}
-		await this.load();
+	// how long before its turn navigation should call prewarm
+	get prewarmLeadMs() {
+		return Math.max(0, Number(this.source?.preloadSec) || 0) * 1000;
+	}
+
+	// navigation calls this, repeatedly, when this source's turn is close (WORK.md 5.1)
+	// once per turn, so a source that fails while getting ready counts one failure
+	prewarm() {
+		if (this.disposed || this.prewarmed || this.player || this.loading || this.skipTurns > 0) return;
+		this.prewarmed = true;
+		this.load();
+	}
+
+	// navigation calls this for every video that is neither on screen nor next
+	releasePlayer() {
+		if (this.active || (!this.player && !this.loading)) return;
+		this.loadToken = null;
+		this.loading = null;
+		this.ready = false;
+		this.fallback = false;
+		this.prewarmed = false;
+		this.disposePlayer();
+		if (!this.failed) this.updateStatusMessage('Preparing video…');
 	}
 
 	load({ fallback = false } = {}) {
@@ -210,7 +225,8 @@ class VideoDisplay extends WeatherDisplay {
 		this.ready = false;
 		this.failed = false;
 		this.lastError = null;
-		this.setStatus(STATUS.loading);
+		// a source trying again after its card was shown rotates as usual while it loads
+		if (this.status === STATUS.failed) this.setStatus(STATUS.loaded);
 
 		let timeout;
 		const timeoutSec = Math.max(0, Number(this.source.preloadSec) || 0) + LOAD_TIMEOUT_EXTRA_SEC;
@@ -228,7 +244,7 @@ class VideoDisplay extends WeatherDisplay {
 			this.ready = true;
 			this.failureCount = 0;
 			this.skipTurns = 0;
-			this.setStatus(STATUS.loaded);
+			if (this.status !== STATUS.loaded) this.setStatus(STATUS.loaded);
 			this.updateStatusMessage('');
 			// reloaded after an edit while on screen
 			if (this.active) {
@@ -280,11 +296,11 @@ class VideoDisplay extends WeatherDisplay {
 	}
 
 	// navigation calls this when rotation moves past this display without showing it
-	// a source sitting out after failures loads again once it has missed its turns
+	// a source sitting out after failures is prewarmed again before its next turn once it has missed its turns
 	skippedTurn() {
 		if (this.skipTurns === 0 || !this.failed) return;
 		this.skipTurns -= 1;
-		if (this.skipTurns === 0) this.load();
+		this.prewarmed = false;
 	}
 
 	async preparePlayer() {
@@ -334,6 +350,14 @@ class VideoDisplay extends WeatherDisplay {
 	showCanvas(navCmd) {
 		this.clearPrewarmTimer();
 		super.showCanvas(navCmd);
+		// the turn starts, the next one may prewarm again
+		this.prewarmed = false;
+		// not prewarmed (the first display, a click in the display list, preloadSec 0): load now,
+		// a source that failed while getting ready shows its card for this turn
+		if (!this.player && !this.loading && !this.failed && !this.disposed) {
+			this.load();
+			return;
+		}
 		this.startPlayback();
 	}
 
@@ -343,12 +367,11 @@ class VideoDisplay extends WeatherDisplay {
 		super.hideCanvas();
 		if (!wasShowing || this.disposed) return;
 		this.pausePlayback();
-		// the card was shown, try the source again before its next turn
-		if (this.failed) {
-			this.getData();
-			return;
-		}
-		this.scheduleStandbyPrewarm();
+		// navigation shows the next display straight after, which can be this one again when it's the only one
+		// otherwise (the menu, the reset button) the player is let go
+		setTimeout(() => {
+			if (!this.active) this.releasePlayer();
+		}, 0);
 	}
 
 	generateCheckbox() {
