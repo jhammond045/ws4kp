@@ -5,7 +5,7 @@ import { DateTime } from '../vendor/auto/luxon.mjs';
 import {
 	msg, displayNavMessage, isPlaying, updateStatus, showDisplay, isLocationActive,
 } from './navigation.mjs';
-import { parseQueryString } from './utils/setting.mjs';
+import { parseQueryString, adoptParams } from './utils/setting.mjs';
 import settings from './settings.mjs';
 import elemForEach from './utils/elem-for-each.mjs';
 import {
@@ -71,6 +71,8 @@ class WeatherDisplay {
 		let urlState;
 		if (urlValue !== undefined) {
 			urlState = urlValue === 'true';
+			// saved below, so the address bar no longer needs it
+			adoptParams(this.elemId, `${this.elemId}-checkbox`);
 		}
 
 		// get the saved status of the checkbox, but defer to a value set in the url

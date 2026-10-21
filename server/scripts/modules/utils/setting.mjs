@@ -18,6 +18,12 @@ const specialMappings = {
 	kiosk: 'settings-kiosk-checkbox',
 };
 
+// opening a link adopts its configuration: url values that were saved (sticky settings, display choices, the location)
+// are removed from the address bar, so the link doesn't undo later changes on every reload
+// values that aren't saved (kiosk, debug, refreshTime) stay in the address
+const adoptedParams = new Set();
+const adoptParams = (...keys) => keys.forEach((key) => adoptedParams.add(key));
+
 class Setting {
 	constructor(shortName, _options) {
 		if (shortName === undefined) {
@@ -67,6 +73,8 @@ class Setting {
 		if ((this.sticky || this.stickyRead || urlValue !== undefined) && storedValue !== null) {
 			this.myValue = storedValue;
 		}
+		// the startup change call below saves a sticky url value
+		if (urlValue !== undefined && this.sticky) adoptParams(shortName, this.elemId);
 
 		// call the change function on startup
 		switch (this.type) {
@@ -318,8 +326,26 @@ const parseQueryString = () => {
 	return parseQueryString.params;
 };
 
+// the address without the adopted parameters, unchanged when there are none
+const withoutAdoptedParams = (href) => {
+	const url = new URL(href);
+	const keys = [...adoptedParams].filter((key) => url.searchParams.has(key));
+	if (keys.length === 0) return href;
+	keys.forEach((key) => url.searchParams.delete(key));
+	return url.href;
+};
+
+const removeAdoptedParams = () => {
+	const href = withoutAdoptedParams(window.location.href);
+	if (href !== window.location.href) window.history.replaceState(null, '', href);
+};
+
 export default Setting;
 
 export {
 	parseQueryString,
+	adoptParams,
+	withoutAdoptedParams,
+	removeAdoptedParams,
+	SETTINGS_KEY,
 };

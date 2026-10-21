@@ -1,4 +1,4 @@
-// tabs below the weather display (displays, settings, share, headend)
+// tabs below the weather display (displays, share, headend)
 import settings from './settings.mjs';
 import announce from './utils/announce.mjs';
 import setHeadend from './headend.mjs';

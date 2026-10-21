@@ -436,6 +436,9 @@ export const setIncludeVideosInPermalink = (_value) => {
 
 export const decodeSourceFromPermalink = decodeCompactValue;
 
+// the storage keys, used by Reset to defaults
+export { STORAGE_KEY, PERMALINK_FLAG_KEY };
+
 export const defaults = { ...DEFAULTS };
 
 export default {

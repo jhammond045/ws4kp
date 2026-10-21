@@ -1,4 +1,4 @@
-import Setting from './utils/setting.mjs';
+import Setting, { adoptParams } from './utils/setting.mjs';
 import { registerHiddenSetting } from './share.mjs';
 
 // Initialize settings immediately so other modules can access them
@@ -235,6 +235,8 @@ const init = () => {
 			['portrait-enhanced', 'Portrait enhanced'],
 		],
 	});
+	// not sticky itself, a url value is saved through the three settings above
+	adoptParams(settings.viewMode.shortName, settings.viewMode.elemId);
 	settings.kiosk = new Setting('kiosk', {
 		name: 'Kiosk',
 		defaultValue: false,

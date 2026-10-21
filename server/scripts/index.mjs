@@ -12,15 +12,19 @@ import settings from './modules/settings.mjs';
 import AutoComplete from './modules/autocomplete.mjs';
 import { StationInfo } from './modules/utils/data-loader.mjs';
 import { debugFlag } from './modules/utils/debug.mjs';
-import { parseQueryString } from './modules/utils/setting.mjs';
+import {
+	parseQueryString, adoptParams, removeAdoptedParams, SETTINGS_KEY,
+} from './modules/utils/setting.mjs';
 import { Settings } from './vendor/auto/luxon.mjs';
 import { resize, isIOS } from './modules/utils/scaling.mjs';
-import createOsdMenu from './modules/osd/osdMenu.mjs';
+import createOsdMenu, { LAST_CATEGORY_KEY } from './modules/osd/osdMenu.mjs';
 import { openOsdModal, closeOsdModal } from './modules/osd/osdModal.mjs';
 import toggleMediaPlayback, { mediaPlaying, mediaVolume } from './modules/media.mjs';
 import { customText, customTextEnable } from './modules/custom-scroll-text.mjs';
 import { openVideoManager } from './modules/video/manager.mjs';
-import { getVideoSources, subscribeVideoSources, clearVideoSources } from './modules/video/sources.mjs';
+import {
+	getVideoSources, subscribeVideoSources, STORAGE_KEY as VIDEO_SOURCES_KEY, PERMALINK_FLAG_KEY as VIDEO_PERMALINK_KEY,
+} from './modules/video/sources.mjs';
 
 // set luxon's default locale to en-US as the forecast text and other hard coded assets are only available in English
 Settings.defaultLocale = 'en-US';
@@ -136,8 +140,11 @@ const init = async () => {
 	// Auto load the parsed parameters and fall back to the previous query
 	const query = parsedParameters.latLonQuery ?? localStorage.getItem('latLonQuery');
 	const latLon = parsedParameters.latLon ?? localStorage.getItem('latLon');
+	// a location from a link replaces the saved one, and GPS, the same as a location entered here
+	const linkHasLocation = loadFromParsed || !!parsedParameters.latLonQuery;
+	if (linkHasLocation) localStorage.removeItem('latLonFromGPS');
 	// compared to the string, earlier versions could store 'false'
-	const fromGPS = localStorage.getItem('latLonFromGPS') === 'true' && !loadFromParsed;
+	const fromGPS = localStorage.getItem('latLonFromGPS') === 'true';
 
 	if (parsedParameters.latLonQuery && !parsedParameters.latLon) {
 		const txtAddress = document.querySelector(TXT_ADDRESS_SELECTOR);
@@ -145,6 +152,7 @@ const init = async () => {
 		const geometry = await findLocation({ text: parsedParameters.latLonQuery });
 		if (geometry) {
 			doRedirectToGeometry(geometry);
+			adoptParams('latLonQuery');
 		}
 	} else if (latLon && !fromGPS) {
 		// update in-page search box if using cached data, or parsed parameter
@@ -155,10 +163,19 @@ const init = async () => {
 		// use lat-long lookup if that's all that was provided in the query string
 		if (loadFromParsed && parsedParameters.latLon && !parsedParameters.latLonQuery) {
 			const { lat, lon } = JSON.parse(latLon);
+			// saves the location
 			getForecastFromLatLon(lat, lon);
+			adoptParams('latLon');
 		} else {
-			// otherwise use pre-stored data
-			loadData(JSON.parse(latLon));
+			// otherwise use pre-stored data, or the link's location which is saved like one entered here
+			const parsedLatLon = JSON.parse(latLon);
+			const { lat, lon } = parsedLatLon ?? {};
+			if (loadFromParsed && Number.isFinite(lat) && Number.isFinite(lon)) {
+				localStorage.setItem('latLonQuery', query);
+				localStorage.setItem('latLon', JSON.stringify({ lat, lon }));
+				adoptParams('latLon', 'latLonQuery');
+			}
+			loadData(parsedLatLon);
 		}
 	}
 	if (fromGPS) {
@@ -173,10 +190,17 @@ const init = async () => {
 		settings.kiosk.value = false;
 		// Clear stored value by using conditional storage with false
 		settings.kiosk.conditionalStoreToLocalStorage(false, false);
+		adoptParams('kiosk', 'settings-kiosk-checkbox');
 	} else if (urlKioskCheckbox === 'true') {
 		// if kiosk mode was set via the query string, enable it
 		settings.kiosk.value = true;
+		// only saved with sticky kiosk, otherwise the address keeps it so a refresh stays in kiosk mode
+		if (settings.stickyKiosk.value) adoptParams('kiosk', 'settings-kiosk-checkbox');
 	}
+
+	// the link's saved settings, screens and location are now this browser's own, remove them from the address
+	// so a refresh shows later changes instead of the link again
+	removeAdoptedParams();
 
 	// Auto-play logic: also play immediately if kiosk mode is enabled
 	const play = settings.kiosk.value || urlKioskCheckbox === 'true' ? 'true' : localStorage.getItem('play');
@@ -216,10 +240,8 @@ const init = async () => {
 	document.querySelector('#container').addEventListener('swiped-right', () => swipeCallBack('right'));
 
 	// register hidden settings for search and location query
-	// a location opened from a link isn't saved, so fall back to the address bar (Reset removes it from there)
-	const locationParam = (key) => localStorage.getItem(key) ?? new URLSearchParams(window.location.search).get(key);
-	registerHiddenSetting('latLonQuery', () => locationParam('latLonQuery'));
-	registerHiddenSetting('latLon', () => locationParam('latLon'));
+	registerHiddenSetting('latLonQuery', () => localStorage.getItem('latLonQuery'));
+	registerHiddenSetting('latLon', () => localStorage.getItem('latLon'));
 
 	// Station info is required for location lookup,
 	// Other static data missing is handled by the pages that use it
@@ -431,13 +453,13 @@ const openAboutModal = () => {
 };
 
 // clear everything this app saved and reload without any url parameters, which brings back every default
-// only this app's keys are removed, a static copy can share its origin (github.io) with other sites
+// only this app's own keys are removed by name, a static copy can share its origin (github.io) with other sites
 const resetAllSettings = () => {
-	clearVideoSources();
-	['Settings', 'latLon', 'latLonQuery', 'latLonFromGPS', 'play', 'firstRun'].forEach((key) => localStorage.removeItem(key));
-	Object.keys(localStorage)
-		.filter((key) => key.startsWith('display-enabled: ') || key.startsWith('ws.'))
-		.forEach((key) => localStorage.removeItem(key));
+	[
+		SETTINGS_KEY, 'latLon', 'latLonQuery', 'latLonFromGPS', 'play', 'firstRun',
+		VIDEO_SOURCES_KEY, VIDEO_PERMALINK_KEY, LAST_CATEGORY_KEY,
+		...getDisplays().map((display) => `display-enabled: ${display.elemId}`),
+	].forEach((key) => localStorage.removeItem(key));
 	window.location.assign(window.location.pathname);
 };
 

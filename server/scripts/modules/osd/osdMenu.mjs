@@ -455,14 +455,6 @@ const createOsdMenu = (dependencies = {}) => {
 		render({ refreshCategories: true, refreshItems: true });
 	};
 
-	document.addEventListener('ws4kp:displays-changed', () => {
-		model.refresh();
-		if (state.open) {
-			loadCategories();
-			render({ refreshCategories: true, refreshItems: true });
-		}
-	});
-
 	document.addEventListener('ws4kp:media-availability', () => {
 		model.refresh();
 		if (state.open) {
@@ -481,3 +473,6 @@ const createOsdMenu = (dependencies = {}) => {
 };
 
 export default createOsdMenu;
+
+// the storage key, used by Reset to defaults
+export { LAST_CATEGORY_KEY };
