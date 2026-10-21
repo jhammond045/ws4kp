@@ -31,7 +31,9 @@
 
 .ws-osd__panel {
   width: min(100%, 600px);
-  height: clamp(320px, 65vh, 420px);
+  // the menu is inside the 640x480 display, which is scaled to fit the window, so sizes are in display pixels
+  // and must not depend on the viewport (vh or a narrow-window media query)
+  height: 420px;
   background: var(--osd-blue);
   border: 2px solid var(--osd-blue-dark);
   box-shadow:
@@ -83,7 +85,8 @@
 
 .ws-osd-modal {
   position: absolute;
-  inset: 6% 8%;
+  // the same margins as the menu, the video manager's buttons need the width
+  inset: 6% 4%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -158,6 +161,13 @@
 .ws-osd-modal__body {
   flex: 1;
   min-height: 0;
+  // a column, so a tall body (the video manager) can shrink to the panel and scroll inside it
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-osd-modal__actions:empty {
+  display: none;
 }
 
 .ws-osd-modal__actions {
@@ -575,10 +585,15 @@
 .ws-osd-video-modal {
   width: 100%;
   max-width: 600px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
   text-align: left;
+}
+
+.ws-osd-video-modal > * {
+  flex-shrink: 0;
 }
 
 .ws-osd-video-modal .settings-video__heading {
@@ -604,8 +619,12 @@
 .ws-osd-video-modal .settings-video__deck {
   display: flex;
   justify-content: center;
-  align-items: stretch;
+  // the source takes its own height and scrolls in the deck, the buttons below stay in view
+  align-items: flex-start;
+  flex-shrink: 1;
   min-height: 0;
+  overflow: hidden auto;
+  scrollbar-color: var(--osd-gray) transparent;
 }
 
 .ws-osd-video-modal .settings-video__deck > .settings-video__item {
@@ -713,6 +732,7 @@
   position: relative;
   padding-bottom: 40px; // Make room for absolutely positioned issues
   overflow: hidden; // Clip any content overflow
+  box-sizing: border-box; // width: 100% in the deck includes the padding
 }
 
 .settings-video__item-header {
@@ -916,47 +936,5 @@
   color: rgba(230, 240, 255, 0.4);
 }
 
-@media (max-width: 640px) {
-  .settings-video__item-body {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .video-field[data-span='full'],
-  .video-field[data-span='three-quarters'],
-  .video-field[data-span='half'] {
-    grid-column: span 2;
-  }
-  
-  .video-field[data-span='quarter'] {
-    grid-column: span 1;
-  }
-}
-
-@media (max-width: 480px) {
-  .settings-video__item-body {
-    grid-template-columns: 1fr;
-  }
-  
-  .video-field[data-span='full'],
-  .video-field[data-span='three-quarters'],
-  .video-field[data-span='half'],
-  .video-field[data-span='quarter'] {
-    grid-column: span 1;
-  }
-}
-
-@media (max-width: 720px) {
-  .ws-osd__panel,
-  .ws-osd-modal__panel {
-    padding: 20px;
-  }
-
-  .ws-osd__columns {
-    grid-template-columns: 1fr;
-    min-height: auto;
-  }
-
-  .ws-osd__legend {
-    font-size: 12px;
-  }
-}
+// no viewport media queries here: the menu and its dialogs are inside the 640x480 display, which is scaled
+// to fit the window, so a narrow window doesn't give them any less room
