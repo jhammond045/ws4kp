@@ -56,9 +56,9 @@ class WeatherDisplay {
 		this.startNavCount();
 
 		// get any templates
-		document.addEventListener('DOMContentLoaded', () => {
-			this.loadTemplates();
-		});
+		// kept so a display created after the page has loaded (video) can remove it, it would never fire
+		this.loadTemplatesOnReady = () => this.loadTemplates();
+		document.addEventListener('DOMContentLoaded', this.loadTemplatesOnReady);
 	}
 
 	generateCheckbox(defaultEnabled = true) {

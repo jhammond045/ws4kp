@@ -83,8 +83,12 @@ class VideoDisplay extends WeatherDisplay {
 			window.localStorage.removeItem(`display-enabled: ${this.elemId}`);
 		}
 		// video displays are built during or after DOMContentLoaded, so the base
-		// class listener never fires; load templates now (idempotent via dataset.initialized)
-		if (document.readyState !== 'loading') this.loadTemplates();
+		// class listener never fires; remove it, so a removed display isn't kept by the document,
+		// and load templates now (idempotent via dataset.initialized)
+		if (document.readyState !== 'loading') {
+			document.removeEventListener('DOMContentLoaded', this.loadTemplatesOnReady);
+			this.loadTemplates();
+		}
 	}
 
 	buildTiming() {

@@ -425,3 +425,20 @@ test('the header title swaps dashes the font lacks and cuts long titles by chara
 	assert.equal(display.displayTitle, '雨雨雨雨雨雨雨雨雨雨雨雨雨雨雨雨🚗…');
 	display.dispose();
 });
+
+test('a video display built after the page loaded leaves no DOMContentLoaded listener behind', () => {
+	const listeners = new Set();
+	const { addEventListener, readyState } = document;
+	document.readyState = 'interactive';
+	document.addEventListener = (type, fn) => { if (type === 'DOMContentLoaded') listeners.add(fn); };
+	document.removeEventListener = (type, fn) => { if (type === 'DOMContentLoaded') listeners.delete(fn); };
+	try {
+		const display = makeDisplay();
+		assert.equal(listeners.size, 0);
+		display.dispose();
+	} finally {
+		document.readyState = readyState;
+		document.addEventListener = addEventListener;
+		delete document.removeEventListener;
+	}
+});
