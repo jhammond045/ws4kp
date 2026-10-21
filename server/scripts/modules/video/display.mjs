@@ -58,6 +58,9 @@ class VideoDisplay extends WeatherDisplay {
 		if (typeof window !== 'undefined' && window?.localStorage) {
 			window.localStorage.removeItem(`display-enabled: ${this.elemId}`);
 		}
+		// video displays are built during or after DOMContentLoaded, so the base
+		// class listener never fires; load templates now (idempotent via dataset.initialized)
+		if (document.readyState !== 'loading') this.loadTemplates();
 	}
 
 	buildTiming() {
