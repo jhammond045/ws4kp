@@ -1,8 +1,8 @@
 // tabs below the weather display (displays, share, headend)
 import settings from './settings.mjs';
-import announce from './utils/announce.mjs';
 import setHeadend from './headend.mjs';
 import { displayScale } from './utils/scaling.mjs';
+import { openCopyResultModal } from './osd/osdModal.mjs';
 
 document.addEventListener('DOMContentLoaded', () => init());
 
@@ -137,12 +137,11 @@ const copyHeadend = async () => {
 		return `${label}: ${value}`;
 	});
 
-	const confirmSpan = document.querySelector('#copy-headend-copied');
 	try {
 		await navigator.clipboard.writeText(lines.join('\n'));
-		announce(confirmSpan, 'Copied to clipboard!');
+		openCopyResultModal(true);
 	} catch (error) {
 		console.error(error);
-		announce(confirmSpan, 'Unable to copy');
+		openCopyResultModal(false, 'Copy failed. Select the headend info and copy it by hand.');
 	}
 };

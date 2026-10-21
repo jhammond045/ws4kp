@@ -1,7 +1,7 @@
 import elemForEach from './utils/elem-for-each.mjs';
 import Setting from './utils/setting.mjs';
-import announce from './utils/announce.mjs';
 import { getVideoSources, encodeSourceForPermalink } from './video/sources.mjs';
+import { openCopyResultModal } from './osd/osdModal.mjs';
 
 document.addEventListener('DOMContentLoaded', () => init());
 
@@ -83,11 +83,12 @@ const copyToClipboard = async (url) => {
 	try {
 		// write to clipboard
 		await navigator.clipboard.writeText(url.toString());
-		// tell the user, the text clears after 5 seconds
-		announce(document.querySelector('#share-link-copied'), 'Link copied to clipboard!');
+		openCopyResultModal(true);
 	} catch (error) {
 		console.error(error);
-		selectLink();
+		// select the link once the modal has closed and returned focus to the button
+		openCopyResultModal(false, 'Copy failed. The link is selected below, copy it by hand.')
+			.then(() => setTimeout(selectLink, 0));
 	}
 };
 

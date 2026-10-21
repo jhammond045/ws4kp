@@ -358,4 +358,18 @@ const initOsdModal = ({ onOpen, onClose } = {}) => {
 	modalRoot.style.display = 'none';
 };
 
-export { initOsdModal, openOsdModal, closeOsdModal };
+// the result of a copy to the clipboard, OSD.md 8: confirmations use OSD modals, not toasts
+const openCopyResultModal = (copied, failureText = 'Copy failed. Copy it by hand.') => {
+	const body = document.createElement('p');
+	body.textContent = copied ? 'Copied to clipboard.' : failureText;
+	return openOsdModal({
+		title: copied ? '--------- COPIED ---------' : '------- COPY FAILED -------',
+		body,
+		actions: [{ id: 'ok', label: '[ OK ]', primary: true }],
+		autofocus: 'ok',
+	});
+};
+
+export {
+	initOsdModal, openOsdModal, closeOsdModal, openCopyResultModal,
+};
