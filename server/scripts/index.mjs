@@ -535,8 +535,19 @@ const openLocationModal = async () => {
 
 	const input = queryContainer.querySelector(TXT_ADDRESS_SELECTOR);
 	requestAnimationFrame(() => input?.focus());
+	// a search blurs the box (loadData), focus goes to the CLOSE row instead of leaving the modal
+	const keepFocusInModal = (event) => {
+		if (event.relatedTarget) return;
+		requestAnimationFrame(() => {
+			const modal = document.querySelector('#ws-osd-modal-root');
+			if (modal?.dataset.osdModalState !== 'open' || modal.contains(document.activeElement)) return;
+			modal.querySelector('[data-action-id="close"]')?.focus();
+		});
+	};
+	input?.addEventListener('blur', keepFocusInModal);
 
 	await result;
+	input?.removeEventListener('blur', keepFocusInModal);
 
 	queryContainer.classList.remove('ws-osd-location__content');
 	placeholder.replaceWith(queryContainer);

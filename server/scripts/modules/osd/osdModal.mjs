@@ -52,15 +52,23 @@ const clearActions = () => {
 	actionElements = [];
 };
 
+// a press outside the panel (the backdrop, the menu behind it) would move focus out of the modal (OSD.md 9)
+const handleMousedownOutside = (event) => {
+	if (modalPanel.contains(event.target)) return;
+	event.preventDefault();
+};
+
 const detachKeydown = () => {
 	if (!keydownHandlerBound) return;
 	document.removeEventListener('keydown', handleKeydown, true);
+	document.removeEventListener('mousedown', handleMousedownOutside, true);
 	keydownHandlerBound = false;
 };
 
 const attachKeydown = () => {
 	if (keydownHandlerBound) return;
 	document.addEventListener('keydown', handleKeydown, true);
+	document.addEventListener('mousedown', handleMousedownOutside, true);
 	keydownHandlerBound = true;
 };
 
