@@ -71,7 +71,7 @@ const createOsdMenuView = (root) => {
 		hideFocusForColumn('items');
 	};
 
-	const updateFocus = (column, index, isActive = true) => {
+	const updateFocus = (column, index, isActive = true, takeFocus = false) => {
 		const rows = column === 'categories' ? categoryRows : itemRows;
 		const focusEl = column === 'categories' ? focusCategories : focusItems;
 		if (
@@ -93,6 +93,12 @@ const createOsdMenuView = (root) => {
 		focusEl.style.height = `${row.offsetHeight}px`;
 		focusEl.setAttribute('data-visible', 'true');
 		updateRowFocusState(rows, index);
+		// roving focus, so assistive technology follows the highlighted row
+		// takeFocus is false while a modal is open, and focus elsewhere on the page is left alone
+		const { activeElement } = document;
+		if (takeFocus && activeElement !== row && (root.contains(activeElement) || activeElement === document.body)) {
+			row.focus({ preventScroll: true });
+		}
 		if (typeof row.scrollIntoView === 'function') {
 			row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 		}
@@ -108,6 +114,7 @@ const createOsdMenuView = (root) => {
 				row.dataset.osdIndex = String(index);
 				row.dataset.categoryId = category.id;
 				row.setAttribute('role', 'option');
+				row.tabIndex = -1;
 				row.textContent = wrapText(
 					category.title ?? category.label ?? category.id,
 				);
@@ -178,6 +185,7 @@ const createOsdMenuView = (root) => {
 					row.removeAttribute('aria-disabled');
 				}
 				row.setAttribute('role', 'option');
+				row.tabIndex = -1;
 				row.dataset.focused = 'false';
 
 				const label = createRow('div', 'ws-osd__row-label');

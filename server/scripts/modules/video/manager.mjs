@@ -555,24 +555,15 @@ const handleRemoveClick = async (state) => {
 		autofocus: 'cancel',
 	});
 
+	// the confirm replaced the manager modal, so the manager opens again afterwards on OK and CANCEL
+	// it opens on the video before the removed one, or on the empty list when that was the last
+	let returnToId = source.id;
 	if (result?.action === 'confirm') {
 		const removedIndex = state.currentIndex;
+		returnToId = currentSources[removedIndex > 0 ? removedIndex - 1 : 1]?.id ?? null;
 		removeVideoSource(source.id);
-
-		// After removal, navigate to previous video or close modal if none remain
-		const remainingCount = currentSources.length - 1; // Count after removal
-
-		if (remainingCount === 0) {
-			// No videos left - close the modal by importing and calling the close function
-			const { closeOsdModal } = await import('../osd/osdModal.mjs');
-			closeOsdModal('removed-last');
-		} else {
-			// Navigate to previous video, or stay at same index if we removed the first one
-			const targetIndex = removedIndex > 0 ? removedIndex - 1 : 0;
-			state.currentIndex = targetIndex;
-			// The subscription handler will re-render the deck
-		}
 	}
+	manager.open(returnToId);
 };
 
 const createVideoManager = () => {

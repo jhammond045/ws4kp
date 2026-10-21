@@ -8,6 +8,9 @@ const upperLabel = (option) => option.label?.toUpperCase?.() ?? option.label;
 // [value, text] pairs from a Setting to enum options
 const settingOptions = (setting) => (setting.values || []).map(([value, label]) => ({ value, label }));
 
+// compared as strings, a numeric setting can arrive as '1.25' from a select or the url
+const sameValue = (a, b) => String(a) === String(b);
+
 const defaultToggleDisplayValue = (value) => (value ? 'ON' : 'OFF');
 
 const snapshotDefinition = (definition) => {
@@ -82,7 +85,7 @@ const createEnumDefinition = ({
 	adjust: async (direction) => {
 		const current = getValue();
 		const values = options.map((option) => option.value);
-		const currentIndex = values.findIndex((value) => value === current);
+		const currentIndex = values.findIndex((value) => sameValue(value, current));
 		const delta = direction === 'decrement' ? -1 : 1;
 		const targetIndex = (currentIndex + delta + values.length) % values.length;
 		const next = values[targetIndex];
@@ -95,7 +98,7 @@ const createEnumDefinition = ({
 	activate: async () => {
 		const values = options.map((option) => option.value);
 		const current = getValue();
-		const nextIndex = (values.findIndex((value) => value === current) + 1) % values.length;
+		const nextIndex = (values.findIndex((value) => sameValue(value, current)) + 1) % values.length;
 		const nextValue = values[nextIndex];
 		if (typeof beforeSet === 'function') {
 			const proceed = await beforeSet(nextValue, current);
@@ -104,7 +107,7 @@ const createEnumDefinition = ({
 		return setValue(nextValue);
 	},
 	getDisplayValue: (value) => {
-		const option = options.find((item) => item.value === value) || options[0];
+		const option = options.find((item) => sameValue(item.value, value)) || options[0];
 		if (!option) return wrapText(value);
 		if (typeof formatLabel === 'function') return formatLabel(option);
 		return option.label ?? wrapText(value);
@@ -416,6 +419,8 @@ class OsdMenuModel {
 					setValue: (value) => {
 						this.settings.kiosk.value = !!value;
 					},
+					// a warning is shown before turning it on
+					beforeSet: (next) => (next ? this.actions?.requestKioskEnable?.() ?? true : true),
 				}),
 			);
 		}

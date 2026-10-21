@@ -73,7 +73,7 @@ These work while the page itself has focus (click on the weather display first i
 | `Space` | Play or pause |
 | `→` or `Page Down` | Next screen |
 | `←` or `Page Up` | Previous screen |
-| `↑` | Open or close the setup menu |
+| `↑` | Open the setup menu (`Esc` closes it) |
 | `0` (zero) | Reload the forecast data |
 | `F` | Enter or exit fullscreen |
 | `Ctrl-K` | Exit [kiosk mode](#kiosk-mode) |
@@ -82,7 +82,7 @@ On a touch screen, swipe left or right on the weather display for the next or pr
 
 ### Settings
 
-These are found in the setup menu, which opens inside the weather display from the gear button below it or the `↑` key. Use the arrow keys or the mouse to move through it, `Enter` to choose, and `Esc` to go back or close it.
+These are found in the setup menu, which opens inside the weather display from the gear button below it or the `↑` key. Use the arrow keys or the mouse to move through it, `Tab` to switch between the categories and their items, `Enter` to choose, and `Esc` to close a dialog, or the menu itself when no dialog is open.
 
 **Speed:** Controls the playback speed of the displays, from "Very Fast" (2x) to "Very Slow" (0.67x) with "Normal" being 1x. Note: if editing the permalink the multipliers are inverse with Very Fast = 0.5 and Very Slow = 1.5. These are the multipliers that are applied directly to the time delays in the slide deck.
 

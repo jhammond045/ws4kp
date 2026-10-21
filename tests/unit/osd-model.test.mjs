@@ -90,3 +90,38 @@ test('no CRT row; scan lines and scan line style rows are bound', async () => {
 	await model.adjustItem('style', itemIndex(model, 'style', 'scan-line-mode'), 'increment');
 	assert.equal(settings.scanLineMode.value, 'thin');
 });
+
+test('enum rows match a value that is a string of a numeric option', async () => {
+	const settings = {
+		speed: fakeSetting('1.25', [[1.0, 'Normal'], [1.25, 'Slow 0.75x'], [1.5, 'Very Slow 0.67x']]),
+	};
+	const model = createOsdMenuModel({ settings });
+	const index = itemIndex(model, 'screens', 'screen-speed');
+	assert.equal(model.getItemsSnapshot('screens')[index].displayValue, 'SLOW 0.75X');
+	await model.adjustItem('screens', index, 'increment');
+	assert.equal(settings.speed.value, 1.5);
+});
+
+test('kiosk row asks before enabling, and not before disabling', async () => {
+	const asked = [];
+	const settings = { kiosk: fakeSetting(false) };
+	let answer = false;
+	const actions = {
+		requestKioskEnable: () => {
+			asked.push(true);
+			return answer;
+		},
+	};
+	const model = createOsdMenuModel({ settings, actions });
+	const index = itemIndex(model, 'style', 'kiosk-mode');
+	await model.activateItem('style', index);
+	assert.equal(asked.length, 1);
+	assert.equal(settings.kiosk.value, false);
+	answer = true;
+	await model.adjustItem('style', index);
+	assert.equal(asked.length, 2);
+	assert.equal(settings.kiosk.value, true);
+	await model.activateItem('style', index);
+	assert.equal(asked.length, 2);
+	assert.equal(settings.kiosk.value, false);
+});

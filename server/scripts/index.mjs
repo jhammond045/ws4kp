@@ -16,7 +16,7 @@ import { parseQueryString } from './modules/utils/setting.mjs';
 import { Settings } from './vendor/auto/luxon.mjs';
 import { resize, isIOS } from './modules/utils/scaling.mjs';
 import createOsdMenu from './modules/osd/osdMenu.mjs';
-import { openOsdModal } from './modules/osd/osdModal.mjs';
+import { openOsdModal, closeOsdModal } from './modules/osd/osdModal.mjs';
 import toggleMediaPlayback, { mediaPlaying, mediaVolume } from './modules/media.mjs';
 import { customText, customTextEnable } from './modules/custom-scroll-text.mjs';
 import { openVideoManager } from './modules/video/manager.mjs';
@@ -391,6 +391,10 @@ const openPermalinkModal = async () => {
 		autofocus: 'ok',
 	});
 
+	// focus is in the link, so Enter there is OK
+	input.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter') closeOsdModal('ok');
+	});
 	requestAnimationFrame(() => {
 		input.focus();
 		input.select();
@@ -512,6 +516,27 @@ const confirmUnitsChange = async (currentValue, nextValue) => {
 	return result?.action === 'confirm';
 };
 
+// asked before kiosk mode turns on, the kiosk row sets the value when this returns true
+const requestKioskEnable = async () => {
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__confirm';
+	const message = document.createElement('p');
+	message.textContent = 'Kiosk mode fills the window with the weather display and hides the toolbar and the rest of the page. There is no on-screen way back: press Ctrl-K to leave kiosk mode.';
+	body.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- KIOSK MODE ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'enable', label: '[ ENABLE ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	return result?.action === 'enable';
+};
+
 // custom-scroll-text.mjs, pipe characters separate messages that are picked at random
 const editCustomText = async () => {
 	const body = document.createElement('div');
@@ -534,6 +559,9 @@ const editCustomText = async () => {
 			{ id: 'set', label: '[ SET ]', primary: true },
 		],
 		autofocus: 'set',
+	});
+	input.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter') closeOsdModal('set');
 	});
 	requestAnimationFrame(() => input.focus());
 
@@ -573,6 +601,7 @@ const toggleOsdMenu = () => {
 					openAboutModal,
 					confirmUnitsChange,
 					editCustomText,
+					requestKioskEnable,
 				},
 				navigation: {
 					isPlaying,
@@ -666,17 +695,21 @@ const updateFullScreenNavigate = () => {
 
 const documentKeydown = (e) => {
 	const { key } = e;
-	// the OSD menu and its modals handle their own keys
-	if (osdMenuController?.isOpen?.()) return false;
 
 	// Handle Ctrl+K to exit kiosk mode (even when other modifiers would normally be ignored)
+	// before the menu check, so it also works with the OSD menu open
 	if (e.ctrlKey && (key === 'k' || key === 'K')) {
 		if (settings.kiosk?.value) {
 			e.preventDefault();
 			settings.kiosk.value = false;
+			// the open menu's kiosk row shows the new value
+			osdMenuController?.refresh();
 		}
 		return false;
 	}
+
+	// the OSD menu and its modals handle their own keys
+	if (osdMenuController?.isOpen?.()) return false;
 
 	// don't trigger on ctrl/alt/shift modified key for other shortcuts
 	if (e.altKey || e.ctrlKey || e.shiftKey) return false;
@@ -704,7 +737,7 @@ const documentKeydown = (e) => {
 				btnNavigatePreviousClick();
 				return false;
 
-			case 'ArrowUp': // open or close the OSD setup menu
+			case 'ArrowUp': // open the OSD setup menu, which takes over the arrow keys while open (Esc closes it)
 				e.preventDefault();
 				toggleOsdMenu();
 				return false;

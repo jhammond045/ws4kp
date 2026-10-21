@@ -46,7 +46,8 @@ const createOsdMenu = (dependencies = {}) => {
 		if (pauseLocks.size === 0) {
 			pauseState.wasPlaying = navigation?.isPlaying?.() ?? false;
 			if (pauseState.wasPlaying) {
-				navigation?.sendCommand?.('stop');
+				// not saved, so a reload while the menu is open (a units change) still plays
+				navigation?.sendCommand?.('pause');
 			}
 		}
 		pauseLocks.add(lockId);
@@ -141,6 +142,8 @@ const createOsdMenu = (dependencies = {}) => {
 		const target = event?.target;
 		if (!target) return;
 		if (root.contains(target)) return;
+		// the gear's own click toggles the menu, closing here would let that click open it again
+		if (target.closest?.('#NavigateSetup')) return;
 		close();
 	};
 
@@ -261,12 +264,14 @@ const createOsdMenu = (dependencies = {}) => {
 		view.updatePagination(state.pageIndex, state.pageCount);
 		view.updateCategorySelection(state.activeCategoryId);
 		const categoryActive = state.focusedColumn === 'categories';
-		view.updateFocus('categories', state.categoryIndex, categoryActive);
+		const takeFocus = state.modalDepth === 0;
+		view.updateFocus('categories', state.categoryIndex, categoryActive, takeFocus);
 		const relativeIndex = state.itemIndex - state.visibleOffset;
 		view.updateFocus(
 			'items',
 			Math.max(0, relativeIndex),
 			!categoryActive && state.items.length > 0,
+			takeFocus,
 		);
 	};
 
@@ -279,10 +284,10 @@ const createOsdMenu = (dependencies = {}) => {
 			: null;
 
 		view.setOpen(true);
-		render({ refreshCategories: true, refreshItems: true });
-
+		// focus first, so the render below can move it to the highlighted row
 		root.setAttribute('tabindex', '-1');
 		root.focus({ preventScroll: true });
+		render({ refreshCategories: true, refreshItems: true });
 
 		keyboard.activate();
 		mouse.activate();
@@ -438,13 +443,9 @@ const createOsdMenu = (dependencies = {}) => {
 		focusItem(targetItemIndex);
 	};
 
+	// modals handle their own Escape, so this only runs with no modal open
 	const handleEscape = () => {
 		if (!state.open) return;
-		if (state.focusedColumn === 'items' && state.categories.length > 0) {
-			state.focusedColumn = 'categories';
-			render();
-			return;
-		}
 		close();
 	};
 

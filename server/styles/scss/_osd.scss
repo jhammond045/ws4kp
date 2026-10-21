@@ -20,7 +20,8 @@
 
 .ws-osd {
   position: absolute;
-  inset: 6% 8%;
+  // narrow side margins leave the rows room for long values (WIDESCREEN ENHANCED) on one line
+  inset: 6% 4%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -36,7 +37,7 @@
   box-shadow:
     0 0 0 2px var(--osd-blue-dark) inset,
     0 6px 24px rgba(0, 0, 0, 0.35);
-  padding: 24px 28px;
+  padding: 24px 20px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -208,7 +209,8 @@
 
 .ws-osd__columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  // categories take only the width of their longest name, the items get the rest
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 18px;
   flex: 1;
   min-height: 0;
@@ -286,10 +288,10 @@
 
 .ws-osd__row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 6px 20px;
+  padding: 6px 14px;
   min-height: 36px;
   font-size: 16px;
   user-select: none;
@@ -299,13 +301,23 @@
   opacity: 0.5;
 }
 
+.ws-osd__row:focus {
+  outline: none;
+}
+
+// one line per row, a label too long for the space left by its value (a video title) is cut off
+// (no ellipsis, the Star4000 font has no visible glyph for it)
 .ws-osd__row-label {
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .ws-osd__row-value {
   justify-self: end;
+  white-space: nowrap;
   font-family: inherit;
   display: flex;
   align-items: center;
@@ -314,6 +326,7 @@
 
 .ws-osd__categories .ws-osd__row {
   grid-template-columns: 1fr;
+  white-space: nowrap;
   text-transform: uppercase;
 }
 
@@ -358,29 +371,6 @@
   font-size: 14px;
   letter-spacing: 0.08em;
   font-weight: 700;
-}
-
-.ws-osd__legend::before,
-.ws-osd__legend::after {
-  content: '►';
-  color: var(--osd-white);
-  margin: 0 8px;
-  font-size: 16px;
-  display: inline-block;
-  animation: pulse-arrow 2s ease-in-out infinite;
-}
-
-.ws-osd__legend::before {
-  content: '◄';
-}
-
-@keyframes pulse-arrow {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 .ws-osd__value-controls {

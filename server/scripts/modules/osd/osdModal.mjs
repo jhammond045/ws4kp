@@ -103,7 +103,17 @@ const handleKeydown = (event) => {
 		return;
 	}
 
-	if (['ArrowLeft', 'ArrowRight'].includes(key) && actionElements.length > 1) {
+	if (key === 'Tab') {
+		event.stopPropagation();
+		event.preventDefault();
+		moveFocusWithin(event.shiftKey ? -1 : 1);
+		return;
+	}
+
+	// text boxes keep their own arrow keys and Enter (the location box searches on Enter)
+	const inTextBox = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+
+	if (['ArrowLeft', 'ArrowRight'].includes(key) && actionElements.length > 1 && !inTextBox) {
 		event.stopPropagation();
 		event.preventDefault();
 		if (key === 'ArrowLeft') {
@@ -116,13 +126,40 @@ const handleKeydown = (event) => {
 		return;
 	}
 
+	// Enter chooses an action button, or the highlighted one when nothing else has focus
+	// other buttons and links get Enter as a click, and text boxes handle it themselves
 	if (key === 'Enter') {
+		const target = event.target instanceof HTMLElement ? event.target : null;
+		const action = actionElements.includes(target)
+			? target
+			: actionElements[focusedActionIndex];
+		const passThrough = !actionElements.includes(target)
+			&& target?.closest('button, a[href], input, textarea, select');
+		if (passThrough || !action) return;
 		event.stopPropagation();
 		event.preventDefault();
-		const action = actionElements[focusedActionIndex];
-		if (action) {
-			selectAction(action.dataset.actionId);
-		}
+		selectAction(action.dataset.actionId);
+	}
+};
+
+// Tab and Shift+Tab cycle through the controls in the open modal and never leave it
+const moveFocusWithin = (direction) => {
+	const focusable = [...modalPanel.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+		.filter((element) => !element.disabled && element.getClientRects().length > 0);
+	if (focusable.length === 0) return;
+	const current = focusable.indexOf(document.activeElement);
+	let next;
+	if (current === -1) {
+		next = direction > 0 ? 0 : focusable.length - 1;
+	} else {
+		next = (current + direction + focusable.length) % focusable.length;
+	}
+	const element = focusable[next];
+	element.focus();
+	const actionIndex = actionElements.indexOf(element);
+	if (actionIndex >= 0) {
+		focusedActionIndex = actionIndex;
+		actionElements.forEach((action, i) => action.setAttribute('data-focused', i === actionIndex ? 'true' : 'false'));
 	}
 };
 
@@ -235,15 +272,19 @@ const openOsdModal = (config) => {
 	renderBody(config.body ?? '');
 	renderActions(config.actions ?? []);
 
+	// before the panel takes focus, so closing returns focus to what opened the modal
+	// a modal replacing another keeps the first one's
+	if (!previousFocus && document.activeElement !== document.body) {
+		previousFocus = document.activeElement instanceof HTMLElement
+			? document.activeElement
+			: null;
+	}
+
 	modalRoot.setAttribute('aria-hidden', 'false');
 	modalRoot.dataset.osdModalState = 'open';
+	modalRoot.style.display = 'flex';
 	modalPanel.setAttribute('tabindex', '-1');
 	modalPanel.focus({ preventScroll: true });
-	modalRoot.style.display = 'flex';
-
-	previousFocus = document.activeElement instanceof HTMLElement
-		? document.activeElement
-		: null;
 
 	onOpenCallback(config);
 
@@ -278,16 +319,24 @@ const closeOsdModal = (result) => {
 	modalPanel.removeAttribute('tabindex');
 	onCloseCallback(result, currentConfig);
 
-	setTimeout(() => {
-		if (previousFocus && typeof previousFocus.focus === 'function') {
+	// a replacement modal opens straight after, and takes over where focus goes back to
+	if (result !== 'replace') {
+		const restoreFocus = previousFocus;
+		previousFocus = null;
+		setTimeout(() => {
+			// another modal opened in the meantime (a confirm going back to the video manager), it returns focus later
+			if (currentConfig) {
+				previousFocus ??= restoreFocus;
+				return;
+			}
+			if (typeof restoreFocus?.focus !== 'function') return;
 			try {
-				previousFocus.focus({ preventScroll: true });
+				restoreFocus.focus({ preventScroll: true });
 			} catch {
 				// ignore focus errors
 			}
-		}
-		previousFocus = null;
-	}, 0);
+		}, 0);
+	}
 
 	const payload = { action: result, config: currentConfig };
 	currentConfig = null;

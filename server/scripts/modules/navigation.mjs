@@ -199,10 +199,11 @@ const showDisplay = (display) => {
 const currentDisplayIndex = () => displays.findIndex((display) => display.active);
 const currentDisplay = () => displays[currentDisplayIndex()];
 
-const setPlaying = (newValue) => {
+// persist = false for a pause that shouldn't survive a reload, such as while the setup menu is open
+const setPlaying = (newValue, persist = true) => {
 	playing = newValue;
 	const playButton = document.querySelector('#NavigatePlay');
-	localStorage.setItem('play', playing);
+	if (persist) localStorage.setItem('play', playing);
 
 	if (playing) {
 		noSleep(true).catch(() => {
@@ -238,6 +239,9 @@ const handleNavButton = (button) => {
 			break;
 		case 'stop':
 			setPlaying(false);
+			break;
+		case 'pause':
+			setPlaying(false, false);
 			break;
 		case 'next':
 			setPlaying(false);
