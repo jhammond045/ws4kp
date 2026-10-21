@@ -2,6 +2,8 @@ import { isAllowedMediaUrl } from '../sources.mjs';
 
 // a page from this site (or about:blank, which takes this site's origin) could remove its own sandbox
 // if it also had allow-same-origin, so only other http(s) sites get it
+// known limit (WORK.md 2.2C): this only sees the URL as written, another site that redirects back to this
+// origin keeps allow-same-origin
 export const iframeSandbox = (src, origin) => {
 	const tokens = ['allow-scripts', 'allow-presentation', 'allow-popups'];
 	if (isAllowedMediaUrl(src) && new URL(src.trim()).origin !== origin) tokens.push('allow-same-origin');

@@ -120,6 +120,7 @@ Given `url` and optional `type`:
 
 - Render `<iframe src="…">` with `allow="autoplay; encrypted-media; picture-in-picture"` and `allowfullscreen` attributes.
 - Autoplay depends on the content and policies; **muted** is not enforceable for unknown iframes.
+- *As built:* the frame is sandboxed with `allow-scripts allow-presentation allow-popups`, plus `allow-same-origin` only when the URL as written is on another origin. **Known limit:** the check can't see redirects, so a URL on another site that redirects back to this site's origin keeps `allow-same-origin` and could script the page. That takes attacker-controlled script on this origin; on GitHub Pages the origin (`<user>.github.io`) is shared by all of that user's Pages repos. Dropping `allow-same-origin` would break most real players, and Pages can't send a CSP.
 
 **All modalities** must:
 
