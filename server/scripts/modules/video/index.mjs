@@ -100,12 +100,12 @@ const buildDisplays = (allSources) => {
 	});
 
 	// register again in the new order, the players are kept
+	// rotation follows navigation's list, so the containers stay where they are: moving an iframe in the page reloads it
 	if (reordered) {
 		const ordered = new Map(sources.map((source) => [source.id, displays.get(source.id)]));
-		ordered.forEach(({ display, container }) => {
+		ordered.forEach(({ display }) => {
 			unregisterDisplay(display);
 			registerDisplay(display);
-			parent.insertBefore(container, anchor);
 		});
 		displays = ordered;
 	}
