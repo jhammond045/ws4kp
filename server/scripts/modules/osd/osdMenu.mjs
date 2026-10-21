@@ -279,8 +279,11 @@ const createOsdMenu = (dependencies = {}) => {
 		if (state.open) return;
 		loadCategories();
 		state.focusedColumn = 'items';
-		state.previousFocus = document.activeElement instanceof HTMLElement
-			? document.activeElement
+		// focus goes back on close only to a control reached with the keyboard (Tab to the gear, Enter)
+		// a clicked gear, or the page itself (ArrowUp), leaves focus on the page so the keyboard shortcuts keep working
+		const { activeElement } = document;
+		state.previousFocus = activeElement instanceof HTMLElement && activeElement.matches(':focus-visible')
+			? activeElement
 			: null;
 
 		view.setOpen(true);
@@ -304,22 +307,14 @@ const createOsdMenu = (dependencies = {}) => {
 		mouse.deactivate();
 		releasePause('menu');
 
+		// focus leaves the menu before it is hidden, a focused element can't be hidden from assistive technology
+		const restoreFocus = state.previousFocus;
+		if (restoreFocus?.isConnected && !root.contains(restoreFocus)) restoreFocus.focus({ preventScroll: true });
+		if (root.contains(document.activeElement)) document.activeElement.blur();
+
 		view.clearFocus();
 		view.setOpen(false);
 		root.removeAttribute('tabindex');
-
-		if (
-			state.previousFocus
-      && typeof state.previousFocus.focus === 'function'
-		) {
-			requestAnimationFrame(() => {
-				try {
-					state.previousFocus.focus({ preventScroll: true });
-				} catch {
-					// ignore focus errors
-				}
-			});
-		}
 
 		state.previousFocus = null;
 		state.open = false;

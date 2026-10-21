@@ -91,6 +91,8 @@ const handleKeydown = (event) => {
 
 	const { key } = event;
 	if (key === 'Escape') {
+		// an open suggestion list (the location box) closes first, the next Escape closes the modal
+		if (event.target instanceof HTMLElement && event.target.getAttribute('aria-expanded') === 'true') return;
 		event.stopPropagation();
 		event.preventDefault();
 		const cancelAction = currentConfig.actions?.find((action) => action.cancel)
@@ -156,11 +158,11 @@ const moveFocusWithin = (direction) => {
 	}
 	const element = focusable[next];
 	element.focus();
+	// only one thing looks focused: an action button loses its highlight while the close button or a field has focus
+	// focusedActionIndex is kept, so the arrow keys carry on from the same button
 	const actionIndex = actionElements.indexOf(element);
-	if (actionIndex >= 0) {
-		focusedActionIndex = actionIndex;
-		actionElements.forEach((action, i) => action.setAttribute('data-focused', i === actionIndex ? 'true' : 'false'));
-	}
+	if (actionIndex >= 0) focusedActionIndex = actionIndex;
+	actionElements.forEach((action, i) => action.setAttribute('data-focused', i === actionIndex ? 'true' : 'false'));
 };
 
 const focusActionByIndex = (index) => {
@@ -313,6 +315,8 @@ const closeOsdModal = (result) => {
 	if (!currentConfig) return;
 	detachKeydown();
 	detachCloseButton();
+	// focus leaves the modal before it is hidden, it goes back to what opened the modal below
+	if (modalRoot.contains(document.activeElement)) document.activeElement.blur();
 	modalRoot.setAttribute('aria-hidden', 'true');
 	modalRoot.dataset.osdModalState = 'closed';
 	modalRoot.style.display = 'none';
