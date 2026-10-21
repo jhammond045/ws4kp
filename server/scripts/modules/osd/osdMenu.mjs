@@ -162,6 +162,8 @@ const createOsdMenu = (dependencies = {}) => {
 			if (state.open && state.modalDepth === 0) {
 				keyboard.activate();
 				mouse.activate();
+				// focus goes back to the highlighted row, the row that opened the modal may have been redrawn since
+				render();
 			}
 		},
 	});
