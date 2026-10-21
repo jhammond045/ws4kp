@@ -146,6 +146,8 @@ class AutoComplete {
 	hideSuggestions() {
 		this.results.style.display = 'none';
 		this.elem.setAttribute('aria-expanded', 'false');
+		// the count or notice no longer describes anything on screen
+		this.announcer.textContent = '';
 		// a hidden line can't stay highlighted, Enter would otherwise choose something the user can't see
 		this.deselectAll();
 	}
