@@ -14,6 +14,19 @@ const supportsNativeHls = () => {
 	);
 };
 
+const supportsMediaSource = () => typeof window.MediaSource?.isTypeSupported === 'function'
+	&& window.MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E,mp4a.40.2"');
+
+// hls.js wherever the browser has Media Source Extensions, the browser's own HLS otherwise (Safari on iPhone)
+// Chrome reports native HLS too, but there a <video> created after another one has played often never starts
+// (readyState 4, currentTime stuck at 0), and some valid streams fail with media error 4
+// exported for tests
+export const chooseHlsPlayback = ({ mediaSource, native }) => {
+	if (mediaSource) return 'hlsjs';
+	if (native) return 'native';
+	return null;
+};
+
 const loadHlsLibrary = async () => {
 	if (window.Hls) {
 		return window.Hls;
@@ -127,7 +140,10 @@ class HlsRenderer {
 	async attachSource() {
 		if (!this.video) return;
 
-		if (supportsNativeHls()) {
+		const native = supportsNativeHls();
+		const playback = chooseHlsPlayback({ mediaSource: supportsMediaSource(), native });
+		if (!playback) throw new Error('This browser can\'t play HLS');
+		if (playback === 'native') {
 			this.usingNative = true;
 			this.video.src = this.source.url;
 			return;
@@ -136,7 +152,10 @@ class HlsRenderer {
 		const Hls = await loadHlsLibrary();
 		if (!this.video) return;
 		if (!Hls.isSupported()) {
-			throw new Error('Hls.js reports unsupported environment');
+			if (!native) throw new Error('Hls.js reports unsupported environment');
+			this.usingNative = true;
+			this.video.src = this.source.url;
+			return;
 		}
 
 		this.hls = new Hls({

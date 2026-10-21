@@ -405,3 +405,13 @@ test('navigation prewarms the next display within its lead time and releases the
 	assert.deepEqual(calls, ['release later', 'release later', 'prewarm next']);
 	[current, next, later].forEach(unregisterDisplay);
 });
+
+test('HLS plays through hls.js wherever Media Source Extensions exist, natively otherwise', async () => {
+	const { chooseHlsPlayback } = await import('../../server/scripts/modules/video/renderers/hls.mjs');
+	// Chrome and desktop Safari report both
+	assert.equal(chooseHlsPlayback({ mediaSource: true, native: true }), 'hlsjs');
+	assert.equal(chooseHlsPlayback({ mediaSource: true, native: false }), 'hlsjs');
+	// Safari on iPhone
+	assert.equal(chooseHlsPlayback({ mediaSource: false, native: true }), 'native');
+	assert.equal(chooseHlsPlayback({ mediaSource: false, native: false }), null);
+});

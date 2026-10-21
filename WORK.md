@@ -110,6 +110,7 @@ Given `url` and optional `type`:
 
 - If browser supports native HLS (`canPlayType('application/vnd.apple.mpegURL')` ok), use `<video>` with `src`, `preload="auto"`, `playsinline`, `muted`, `loop` flags from settings.
 - Else **conditionally load** `hls.js` (dynamic `import()` or script injection) only for this display.
+- *As built:* hls.js is used wherever the browser has Media Source Extensions, and native HLS only where it doesn't (Safari on iPhone). Chrome now reports native HLS, but its native player often never starts a `<video>` created after another one has played, and fails some valid streams (media error 4). hls.js is still loaded only when an HLS source mounts.
 
   - Create `<video>` without `src`; attach Hls instance, `hls.loadSource(url); hls.attachMedia(video)`.
 
