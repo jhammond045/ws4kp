@@ -36,9 +36,15 @@ class IframeRenderer {
 		this.iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
 		this.iframe.allowFullscreen = true;
 		this.iframe.title = this.source.title || 'Embedded video';
+		// resolves once the page has loaded, so a host that never answers runs into the display's load timeout
+		// a page that refuses to be framed still fires load, the browser shows its error page in the frame
+		const loaded = new Promise((resolve) => {
+			this.iframe.addEventListener('load', resolve, { once: true });
+		});
 		this.setSource();
 
 		this.container.append(this.iframe);
+		await loaded;
 	}
 
 	async prewarm() {

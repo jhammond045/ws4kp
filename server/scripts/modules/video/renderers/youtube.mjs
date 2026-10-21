@@ -3,7 +3,12 @@ import { extractYouTubeId } from '../detect.mjs';
 const API_SRC = 'https://www.youtube.com/iframe_api';
 // privacy-enhanced embeds, the player's postMessage origin must match this host
 const EMBED_HOST = 'https://www.youtube-nocookie.com';
+// player errors 101 and 150: the owner doesn't allow embedding
+const EMBED_REFUSED = new Set([101, 150]);
 let youtubeApiPromise;
+
+// the display tries a plain embed for errors marked fallback, see VideoDisplay.fallBackOrFail
+const apiError = (message) => Object.assign(new Error(message), { fallback: true });
 
 const loadYouTubeAPI = () => {
 	if (window.YT?.Player) {
@@ -16,7 +21,7 @@ const loadYouTubeAPI = () => {
 		let resolved = false;
 		const timeout = setTimeout(() => {
 			if (!resolved) {
-				reject(new Error('Timed out loading YouTube API'));
+				reject(apiError('Timed out loading YouTube API'));
 			}
 		}, 10000);
 
@@ -31,7 +36,7 @@ const loadYouTubeAPI = () => {
 			if (window.YT?.Player) {
 				resolve(window.YT);
 			} else {
-				reject(new Error('YouTube API failed to initialize'));
+				reject(apiError('YouTube API failed to initialize'));
 			}
 		};
 
@@ -42,7 +47,7 @@ const loadYouTubeAPI = () => {
 			clearTimeout(timeout);
 			window.onYouTubeIframeAPIReady = previousHandler;
 			script.remove();
-			reject(new Error('Failed to load YouTube API script'));
+			reject(apiError('Failed to load YouTube API script'));
 		};
 		document.head.append(script);
 	}).catch((error) => {
@@ -136,6 +141,7 @@ class YouTubeRenderer {
 					},
 					onError: (error) => {
 						const failure = new Error(`YouTube player error: ${error.data}`);
+						failure.fallback = EMBED_REFUSED.has(error.data);
 						// a removed or private video often errors after it reports ready
 						if (this.isReady) {
 							this.onFail?.(failure);

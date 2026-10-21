@@ -198,3 +198,72 @@ test('a new URL on a loaded display loads again with the load timeout', async ()
 	assert.equal(display.statusContainer.textContent, 'VIDEO UNAVAILABLE');
 	display.dispose();
 });
+
+const withYouTubeStub = (mount) => {
+	const made = [];
+	class YouTubeStub {
+		constructor(source) {
+			made.push(source);
+		}
+
+		// eslint-disable-next-line class-methods-use-this
+		mount() { return mount(); }
+
+		// eslint-disable-next-line class-methods-use-this
+		dispose() {}
+	}
+	RENDERERS.youtube = YouTubeStub;
+	return made;
+};
+
+const youtubeSource = { url: 'https://www.youtube.com/watch?v=M7lc1UVf-VE', type: 'auto' };
+
+test('YouTube refusing the embed tries a plain embed once before the card', async () => {
+	const made = withYouTubeStub(() => Promise.reject(Object.assign(new Error('YouTube player error: 150'), { fallback: true })));
+	const iframeSources = [];
+	mountResult = () => new Promise(() => {});
+	RENDERERS.iframe = class extends StubRenderer {
+		constructor(source) {
+			super(source);
+			iframeSources.push(source);
+		}
+	};
+	const display = makeDisplay(youtubeSource);
+	const loading = display.getData();
+	// let the YouTube rejection reach the display, setImmediate isn't faked
+	await new Promise((resolve) => { setImmediate(resolve); });
+	assert.equal(made.length, 1);
+	assert.equal(display.fallback, true);
+	// the fallback page never loads, so it runs into its own timeout
+	mock.timers.tick(10_000);
+	await loading;
+	assert.equal(iframeSources.length, 1);
+	assert.match(iframeSources[0].url, /^https:\/\/www\.youtube-nocookie\.com\/embed\/M7lc1UVf-VE\?/);
+	assert.equal(display.status, STATUS.failed);
+	assert.equal(display.failureCount, 1);
+	assert.equal(made.length, 1);
+	display.dispose();
+	RENDERERS.iframe = StubRenderer;
+});
+
+test('a working plain embed fallback is shown, and the next edit tries YouTube again', async () => {
+	const made = withYouTubeStub(() => Promise.reject(Object.assign(new Error('Failed to load YouTube API script'), { fallback: true })));
+	const display = makeDisplay(youtubeSource);
+	await display.getData();
+	assert.equal(display.status, STATUS.loaded);
+	assert.equal(display.fallback, true);
+	assert.equal(constructed, 1);
+	display.updateSource({ ...display.source, muted: false });
+	await display.loading;
+	assert.equal(made.length, 2);
+	display.dispose();
+});
+
+test('a removed YouTube video (error 100) shows the card without a fallback', async () => {
+	withYouTubeStub(() => Promise.reject(Object.assign(new Error('YouTube player error: 100'), { fallback: false })));
+	const display = makeDisplay(youtubeSource);
+	await display.getData();
+	assert.equal(display.status, STATUS.failed);
+	assert.equal(constructed, 0);
+	display.dispose();
+});

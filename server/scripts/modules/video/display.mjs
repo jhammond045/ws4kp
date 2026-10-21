@@ -1,6 +1,6 @@
 import WeatherDisplay from '../weatherdisplay.mjs';
 import STATUS from '../status.mjs';
-import { detectSourceType, getPreconnectOrigins } from './detect.mjs';
+import { detectSourceType, getPreconnectOrigins, buildYouTubeEmbedUrl } from './detect.mjs';
 import IframeRenderer from './renderers/iframe.mjs';
 import YouTubeRenderer from './renderers/youtube.mjs';
 import HlsRenderer from './renderers/hls.mjs';
@@ -63,6 +63,8 @@ class VideoDisplay extends WeatherDisplay {
 		this.lastError = null;
 		this.loading = null;
 		this.loadToken = null;
+		// true while a YouTube source plays as a plain embed, see fallBackOrFail
+		this.fallback = false;
 		this.disposed = false;
 		this.buildTiming();
 		this.prewarmTimeout = null;
@@ -199,9 +201,10 @@ class VideoDisplay extends WeatherDisplay {
 		await this.load();
 	}
 
-	load() {
+	load({ fallback = false } = {}) {
 		const token = {};
 		this.loadToken = token;
+		this.fallback = fallback;
 		this.ready = false;
 		this.failed = false;
 		this.lastError = null;
@@ -212,7 +215,11 @@ class VideoDisplay extends WeatherDisplay {
 		this.loading = Promise.race([
 			this.preparePlayer(),
 			new Promise((resolve, reject) => {
-				timeout = setTimeout(() => reject(new Error(`Timed out after ${timeoutSec}s`)), timeoutSec * 1000);
+				timeout = setTimeout(() => {
+					const error = new Error(`Timed out after ${timeoutSec}s`);
+					error.timedOut = true;
+					reject(error);
+				}, timeoutSec * 1000);
 			}),
 		]).then(() => {
 			if (this.loadToken !== token) return;
@@ -224,13 +231,25 @@ class VideoDisplay extends WeatherDisplay {
 			// reloaded after an edit while on screen
 			if (this.active) this.startPlayback();
 		}, (error) => {
-			if (this.loadToken !== token) return;
-			this.fail(error);
+			if (this.loadToken !== token) return undefined;
+			return this.fallBackOrFail(error);
 		}).finally(() => {
 			clearTimeout(timeout);
 			if (this.loadToken === token) this.loading = null;
 		});
 		return this.loading;
+	}
+
+	// WORK.md 7: when YouTube refuses the embed (101/150), its API doesn't load or the player doesn't get ready in time,
+	// try a plain embed once before showing the card
+	// the plain embed can't report errors, so for 101/150 it shows YouTube's own error page instead of the card
+	fallBackOrFail(error) {
+		if (this.mode === 'youtube' && !this.fallback && (error?.fallback || error?.timedOut)) {
+			console.warn(`Video "${this.source.title}": ${error.message}, trying a plain embed`);
+			return this.load({ fallback: true });
+		}
+		this.fail(error);
+		return undefined;
 	}
 
 	// show the unavailable card, rotation shows it for the source's duration and then moves on
@@ -265,14 +284,27 @@ class VideoDisplay extends WeatherDisplay {
 		if (!this.playerContainer) return;
 		this.disposePlayer();
 		this.updateStatusMessage('Preparing video…');
-		const type = this.mode || detectSourceType(this.source);
+		let type = this.mode || detectSourceType(this.source);
 		ensurePreconnect(type, this.source.url);
+		let source = playableSource(this.source);
+		if (this.fallback) {
+			type = 'iframe';
+			source = {
+				...source,
+				url: buildYouTubeEmbedUrl(source.url, {
+					mute: source.muted === false ? 0 : 1,
+					loop: source.loop ? 1 : 0,
+					startAt: source.startAt,
+					endAt: source.endAt ?? undefined,
+				}),
+			};
+		}
 		const Renderer = RENDERERS[type] || RENDERERS.iframe;
-		const player = new Renderer(playableSource(this.source));
+		const player = new Renderer(source);
 		this.player = player;
 		// errors after the player is up (a removed YouTube video, a dead stream) also show the card
 		player.onFail = (error) => {
-			if (this.player === player) this.fail(error);
+			if (this.player === player) this.fallBackOrFail(error);
 		};
 		await player.mount(this.playerContainer);
 		// a timeout, newer load or dispose replaced this player while it was mounting
@@ -365,7 +397,8 @@ class VideoDisplay extends WeatherDisplay {
 			return;
 		}
 		// a new URL loads like the first time, with the same timeout and unavailable card
-		if (modeChanged || urlChanged || !this.player || !this.player.update) {
+		// a YouTube source on its plain embed fallback tries the player API again
+		if (modeChanged || urlChanged || this.fallback || !this.player || !this.player.update) {
 			this.load();
 			return;
 		}
