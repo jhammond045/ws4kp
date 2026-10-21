@@ -1,5 +1,6 @@
 import WeatherDisplay from '../weatherdisplay.mjs';
 import STATUS from '../status.mjs';
+import { escapeHtml } from '../utils/string.mjs';
 import { detectSourceType, getPreconnectOrigins, buildYouTubeEmbedUrl } from './detect.mjs';
 import IframeRenderer from './renderers/iframe.mjs';
 import YouTubeRenderer from './renderers/youtube.mjs';
@@ -51,7 +52,8 @@ const formatDisplayTitle = (title) => {
 class VideoDisplay extends WeatherDisplay {
 	constructor(navId, elemId, source) {
 		const initialTitle = formatDisplayTitle(source?.title);
-		super(navId, elemId, initialTitle, true);
+		// the progress screen writes name with innerHTML, and the title can come from a link
+		super(navId, elemId, escapeHtml(initialTitle), true);
 		this.source = { ...source };
 		this.mode = detectSourceType(source);
 		this.player = null;
@@ -166,7 +168,7 @@ class VideoDisplay extends WeatherDisplay {
 		if (this.titleElem) {
 			this.titleElem.textContent = nextTitle;
 		}
-		this.name = nextTitle;
+		this.name = escapeHtml(nextTitle);
 		if (this.checkbox) {
 			const label = this.checkbox.querySelector('span:not(.alert)');
 			if (label) label.textContent = nextTitle;

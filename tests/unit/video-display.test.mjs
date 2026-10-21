@@ -311,3 +311,14 @@ test('a plain YouTube embed fallback that never fires load times out to the card
 	assert.equal(display.statusContainer.textContent, 'VIDEO UNAVAILABLE');
 	display.dispose();
 }));
+
+test('a title from a link is escaped in the name the progress screen writes as HTML', () => {
+	// 18 characters, short enough to pass through untruncated
+	const display = makeDisplay({ title: '<base href=//x.co>' });
+	assert.equal(display.name, '&lt;base href=//x.co&gt;');
+	assert.equal(display.displayTitle, '<base href=//x.co>');
+	display.updateSource({ ...display.source, title: '<img src=x id=p>' });
+	assert.equal(display.name, '&lt;img src=x id=p&gt;');
+	assert.equal(display.displayTitle, '<img src=x id=p>');
+	display.dispose();
+});
