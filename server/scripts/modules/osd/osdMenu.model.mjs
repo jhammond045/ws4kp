@@ -3,7 +3,10 @@ const wrapText = (value) => {
 	return String(value);
 };
 
-const formatSpeedLabel = (value) => `${Number(value).toFixed(2)}x`;
+const upperLabel = (option) => option.label?.toUpperCase?.() ?? option.label;
+
+// [value, text] pairs from a Setting to enum options
+const settingOptions = (setting) => (setting.values || []).map(([value, label]) => ({ value, label }));
 
 const defaultToggleDisplayValue = (value) => (value ? 'ON' : 'OFF');
 
@@ -108,6 +111,53 @@ const createEnumDefinition = ({
 	},
 });
 
+// steps between min and max; a value between steps (75 with a step of 10) moves to the nearest step in that direction
+const createNumberDefinition = ({
+	id,
+	label,
+	min,
+	max,
+	step,
+	getValue,
+	setValue,
+	formatValue,
+	isDisabled,
+}) => {
+	const stepFrom = (current, direction) => {
+		const steps = direction === 'decrement'
+			? Math.ceil((current - min) / step) - 1
+			: Math.floor((current - min) / step) + 1;
+		return Math.min(max, Math.max(min, min + steps * step));
+	};
+	return {
+		id,
+		label,
+		type: 'number',
+		getValue,
+		setValue,
+		isDisabled: isDisabled ?? (() => false),
+		adjust: async (direction) => setValue(stepFrom(Number(getValue()), direction)),
+		// enter steps up, and wraps around to the minimum after the maximum
+		activate: async () => {
+			const current = Number(getValue());
+			return setValue(current >= max ? min : stepFrom(current, 'increment'));
+		},
+		getDisplayValue: (value) => (formatValue ? formatValue(value) : wrapText(value)),
+	};
+};
+
+// turn a display on or off through its checkbox on the Displays tab
+// the checkbox's change listener updates the display, and the tab's count and the permalink read the checkbox
+const setDisplayEnabled = (display, value) => {
+	const checkbox = display.checkbox?.querySelector('input[type=checkbox]');
+	if (checkbox) {
+		checkbox.checked = value;
+		checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+		return;
+	}
+	display.checkboxChange?.({ target: { checked: value } });
+};
+
 const createActionDefinition = ({
 	id,
 	label,
@@ -163,12 +213,7 @@ class OsdMenuModel {
 		}
 
 		if (this.settings?.units) {
-			const options = (this.settings.units.values || []).map(
-				([value, text]) => ({
-					value,
-					label: text,
-				}),
-			);
+			const options = settingOptions(this.settings.units);
 			items.push(
 				createEnumDefinition({
 					id: 'units',
@@ -178,7 +223,7 @@ class OsdMenuModel {
 					setValue: (value) => {
 						this.settings.units.value = value;
 					},
-					formatLabel: (option) => option.label?.toUpperCase?.() ?? option.label,
+					formatLabel: upperLabel,
 					beforeSet: (nextValue, currentValue) => {
 						if (nextValue === currentValue) return true;
 						if (typeof this.actions?.confirmUnitsChange === 'function') {
@@ -190,15 +235,18 @@ class OsdMenuModel {
 			);
 		}
 
-		if (this.settings?.wide) {
+		// widescreen, enhanced and portrait are set together by the display mode
+		if (this.settings?.viewMode) {
 			items.push(
-				createToggleDefinition({
-					id: 'widescreen',
-					label: 'Widescreen',
-					getValue: () => !!this.settings.wide.value,
+				createEnumDefinition({
+					id: 'view-mode',
+					label: 'Display Mode',
+					options: settingOptions(this.settings.viewMode),
+					getValue: () => this.settings.viewMode.value,
 					setValue: (value) => {
-						this.settings.wide.value = value;
+						this.settings.viewMode.value = value;
 					},
+					formatLabel: upperLabel,
 				}),
 			);
 		}
@@ -220,22 +268,29 @@ class OsdMenuModel {
 				id: `screen-${display.elemId}`,
 				label: display.name ?? display.elemId,
 				getValue: () => !!display.isEnabled,
-				setValue: (value) => {
-					if (typeof display.checkboxChange === 'function') {
-						display.checkboxChange({ target: { checked: value } });
-					} else {
-						display.isEnabled = value;
-						if (value) {
-							display.getData();
-						}
-					}
-				},
+				setValue: (value) => setDisplayEnabled(display, value),
 			}));
+
+		const items = [];
+		if (this.settings?.speed) {
+			items.push(
+				createEnumDefinition({
+					id: 'screen-speed',
+					label: 'Screen Speed',
+					options: settingOptions(this.settings.speed),
+					getValue: () => this.settings.speed.value,
+					setValue: (value) => {
+						this.settings.speed.value = Number(value);
+					},
+					formatLabel: upperLabel,
+				}),
+			);
+		}
 
 		return {
 			id: 'screens',
 			title: 'SCREENS',
-			items: displayItems,
+			items: [...items, ...displayItems],
 		};
 	}
 
@@ -255,20 +310,17 @@ class OsdMenuModel {
 		}
 
 		if (this.media?.getVolume && this.media?.setVolume) {
-			const volumeOptions = this.media.getVolumeOptions?.() ?? [
-				{ value: 1, label: '100%' },
-				{ value: 0.75, label: '75%' },
-				{ value: 0.5, label: '50%' },
-				{ value: 0.25, label: '25%' },
-			];
+			// the volume setting is 0-1, shown as a percentage
 			items.push(
-				createEnumDefinition({
+				createNumberDefinition({
 					id: 'music-volume',
 					label: 'Music Volume',
-					options: volumeOptions,
-					getValue: () => this.media.getVolume(),
-					setValue: (value) => this.media.setVolume(Number(value)),
-					formatLabel: (option) => option.label,
+					min: 0,
+					max: 100,
+					step: 10,
+					getValue: () => Math.round(Number(this.media.getVolume()) * 100),
+					setValue: (value) => this.media.setVolume(value / 100),
+					formatValue: (value) => `${value}%`,
 					isDisabled: () => !musicAvailable,
 				}),
 			);
@@ -326,6 +378,35 @@ class OsdMenuModel {
 	buildStyleCategory() {
 		const items = [];
 
+		if (this.settings?.scanLines) {
+			items.push(
+				createToggleDefinition({
+					id: 'scan-lines',
+					label: 'Scan Lines',
+					getValue: () => !!this.settings.scanLines.value,
+					setValue: (value) => {
+						this.settings.scanLines.value = !!value;
+					},
+				}),
+			);
+		}
+
+		if (this.settings?.scanLineMode) {
+			items.push(
+				createEnumDefinition({
+					id: 'scan-line-mode',
+					label: 'Scan Line Style',
+					options: settingOptions(this.settings.scanLineMode),
+					getValue: () => this.settings.scanLineMode.value,
+					setValue: (value) => {
+						this.settings.scanLineMode.value = value;
+					},
+					formatLabel: upperLabel,
+					isDisabled: () => !this.settings.scanLines?.value,
+				}),
+			);
+		}
+
 		if (this.settings?.kiosk) {
 			items.push(
 				createToggleDefinition({
@@ -339,45 +420,40 @@ class OsdMenuModel {
 			);
 		}
 
-		if (this.settings?.speed) {
-			const allowed = [0.75, 1.0, 1.25, 1.5];
-			const options = (this.settings.speed.values || [])
-				.filter(([value]) => allowed.includes(Number(value)))
-				.map(([value]) => ({
-					value,
-					label: formatSpeedLabel(value),
-				}));
-
+		if (this.settings?.stickyKiosk) {
 			items.push(
-				createEnumDefinition({
-					id: 'screen-speed',
-					label: 'Screen Speed',
-					options,
-					getValue: () => this.settings.speed.value,
+				createToggleDefinition({
+					id: 'sticky-kiosk',
+					label: 'Sticky Kiosk',
+					getValue: () => !!this.settings.stickyKiosk.value,
 					setValue: (value) => {
-						this.settings.speed.value = Number(value);
+						this.settings.stickyKiosk.value = !!value;
 					},
-					formatLabel: (option) => option.label,
 				}),
 			);
 		}
 
-		if (this.settings?.crtStrength?.values?.length) {
-			const options = this.settings.crtStrength.values.map(
-				([value, label]) => ({
-					value,
-					label,
+		// custom-scroll-text.mjs
+		if (this.settings?.customTextEnable) {
+			items.push(
+				createToggleDefinition({
+					id: 'custom-text-enable',
+					label: 'Custom Text',
+					getValue: () => !!this.settings.customTextEnable.value,
+					setValue: (value) => {
+						this.settings.customTextEnable.value = !!value;
+					},
 				}),
 			);
+		}
+
+		if (this.settings?.customText && this.actions?.editCustomText) {
 			items.push(
-				createEnumDefinition({
-					id: 'crt-strength',
-					label: 'CRT Effect',
-					options,
-					getValue: () => this.settings.crtStrength.value,
-					setValue: (value) => {
-						this.settings.crtStrength.value = value;
-					},
+				createActionDefinition({
+					id: 'custom-text',
+					label: 'Edit Custom Text',
+					onActivate: this.actions.editCustomText,
+					displayValue: 'EDIT',
 				}),
 			);
 		}

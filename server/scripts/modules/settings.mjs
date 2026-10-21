@@ -324,17 +324,19 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 
 	// Then generate the settings UI
+	// without a settings panel (the OSD menu edits the settings) every visible setting is registered
+	// so the permalink still includes it
+	const settingsSection = document.querySelector('#settings');
 	const settingElems = Object.values(settings).map((setting) => {
-		if (hiddenSettingNames.includes(setting.shortName)) {
+		if (!settingsSection || hiddenSettingNames.includes(setting.shortName)) {
 			// setting is hidden, register it
-			registerHiddenSetting(setting.shortName, setting);
+			if (setting.visible) registerHiddenSetting(setting.shortName, setting);
 			return false;
 		}
 		// generate HTML for setting
 		return setting.generate();
 	}).filter((d) => d);
-	const settingsSection = document.querySelector('#settings');
-	settingsSection.prepend(...settingElems);
+	settingsSection?.prepend(...settingElems);
 
 	// update visibility on some settings
 	const modeSelect = document.getElementById('settings-scanLineMode-label');

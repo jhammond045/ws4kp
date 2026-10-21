@@ -58,10 +58,9 @@ Reset clears the saved location and returns to the title card. If a location can
 
 ### Page layout
 
-Below the weather display are four tabs:
+Below the weather display are three tabs:
 
 * **Displays:** Checkboxes to turn each display on or off, with a count of how many are enabled. Each display's name is colored by its status (ready, loading, failed or off/no data), and clicking the name of a ready display jumps straight to it. Hazards shows an ALERT tag when there are alerts you haven't seen yet.
-* **Settings:** The options described in [Settings](#settings).
 * **Share:** Shows and copies a [permalink](#sharing-a-permalink-bookmarking) to your current configuration.
 * **Headend:** What the forecast is built from: the location, the observation station and when it last reported, the radar, forecast zone, NWS office and grid point, the HRRR model run used by Future Radar, and when the data was last refreshed. It also shows the display mode and scale, whether the page is using the caching server, any displays that are failing, the version number and the music track that is playing. The "Copy headend info" button copies all of this as text, which is helpful to include when reporting an issue.
 
@@ -74,7 +73,7 @@ These work while the page itself has focus (click on the weather display first i
 | `Space` | Play or pause |
 | `→` or `Page Down` | Next screen |
 | `←` or `Page Up` | Previous screen |
-| `↑` | Stop playback and show the list of displays |
+| `↑` | Open or close the setup menu |
 | `0` (zero) | Reload the forecast data |
 | `F` | Enter or exit fullscreen |
 | `Ctrl-K` | Exit [kiosk mode](#kiosk-mode) |
@@ -83,7 +82,7 @@ On a touch screen, swipe left or right on the weather display for the next or pr
 
 ### Settings
 
-These are found on the Settings tab below the weather display.
+These are found in the setup menu, which opens inside the weather display from the gear button below it or the `↑` key. Use the arrow keys or the mouse to move through it, `Enter` to choose, and `Esc` to go back or close it.
 
 **Speed:** Controls the playback speed of the displays, from "Very Fast" (2x) to "Very Slow" (0.67x) with "Normal" being 1x. Note: if editing the permalink the multipliers are inverse with Very Fast = 0.5 and Very Slow = 1.5. These are the multipliers that are applied directly to the time delays in the slide deck.
 

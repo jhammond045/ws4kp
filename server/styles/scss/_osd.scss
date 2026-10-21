@@ -466,8 +466,10 @@
   margin-bottom: 4px;
 }
 
-.ws-osd-location__content {
+#divQuery.ws-osd-location__content {
   width: 100%;
+  max-width: none;
+  padding: 0;
   display: grid;
   grid-template-columns: 1fr max-content;
   column-gap: 20px;
@@ -476,13 +478,18 @@
 }
 
 // Input field wrapper - wraps the input in its own container
-.ws-osd-location__content .input-wrap {
+#divQuery.ws-osd-location__content .location-input {
   grid-column: 1 / -1;
   min-width: 0;
   position: relative;
 }
 
-.ws-osd-location__content #txtLocation {
+#divQuery.ws-osd-location__content .location-status {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+#divQuery.ws-osd-location__content #txtLocation {
   width: 100%;
   min-width: 0;
   padding: 12px 16px;
@@ -507,15 +514,15 @@
   }
 }
 
-.ws-osd-location__content #txtLocation:focus,
-.ws-osd-location__content #txtLocation:focus-visible {
+#divQuery.ws-osd-location__content #txtLocation:focus,
+#divQuery.ws-osd-location__content #txtLocation:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(230, 240, 255, 0.6);
   border-color: var(--osd-white);
 }
 
 // Actions column - vertical stack on the right
-.ws-osd-location__content .buttons {
+#divQuery.ws-osd-location__content .buttons {
   grid-column: 2;
   display: grid;
   grid-auto-rows: 44px;
@@ -524,7 +531,7 @@
   align-items: start;
 }
 
-.ws-osd-location__content button {
+#divQuery.ws-osd-location__content button {
   background: var(--osd-blue-dark);
   color: var(--osd-white);
   border: 2px solid rgba(200, 220, 255, 0.35);
@@ -555,7 +562,7 @@
 }
 
 // GPS button - square icon button
-.ws-osd-location__content #btnGetGps {
+#divQuery.ws-osd-location__content #btnGetGps {
   width: 44px;
   min-width: 44px;
   padding: 0;
@@ -570,7 +577,7 @@
   }
 }
 
-.ws-osd-location__content button:focus-visible {
+#divQuery.ws-osd-location__content button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(230, 240, 255, 0.6);
 }

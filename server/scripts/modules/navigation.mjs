@@ -278,17 +278,28 @@ const resetStatuses = () => {
 };
 
 // allow displays to register themselves
+// displays created at runtime (video) pass a negative nav ID and are added after the static list
 const registerDisplay = (display) => {
+	if (display.navId < 0) {
+		display.navId = displays.length;
+		displays.push(display);
+		return;
+	}
 	if (displays[display.navId]) console.warn(`Display nav ID ${display.navId} already in use`);
 	displays[display.navId] = display;
 };
 
-// remove a display that was registered at runtime (video displays), trimming empty slots from the end
+// remove a display added at runtime, the displays after it move up and take the next lower nav ID
 const unregisterDisplay = (display) => {
-	if (displays[display.navId] !== display) return;
-	delete displays[display.navId];
-	while (displays.length > 0 && !displays[displays.length - 1]) displays.pop();
+	const index = displays.indexOf(display);
+	if (index < 0) return;
+	displays.splice(index, 1);
+	for (let i = index; i < displays.length; i += 1) displays[i].navId = i;
+	display.navId = -1;
 };
+
+// all registered displays, used by the OSD menu's screen list
+const getDisplays = () => [...displays];
 
 const generateCheckboxes = () => {
 	const availableDisplays = document.querySelector('#enabledDisplays');
@@ -352,6 +363,7 @@ export {
 	currentDisplay,
 	showDisplay,
 	getDisplay,
+	getDisplays,
 	startDisplays,
 	msg,
 	message,

@@ -1,6 +1,7 @@
 import elemForEach from './utils/elem-for-each.mjs';
 import Setting from './utils/setting.mjs';
 import announce from './utils/announce.mjs';
+import { getVideoSources, encodeSourceForPermalink } from './video/sources.mjs';
 
 document.addEventListener('DOMContentLoaded', () => init());
 
@@ -38,14 +39,22 @@ const buildLink = () => {
 	// get any hidden settings
 	hiddenSettings.forEach((setting) => {
 		// determine type
+		let value;
 		if (setting.value instanceof Setting) {
-			queryStringElements[setting.name] = setting.value.value;
+			value = setting.value.value;
 		} else if (typeof setting.value === 'function') {
-			queryStringElements[setting.name] = setting.value();
+			value = setting.value();
 		}
+		// nothing saved (such as no location when the page was opened from a link) would become the text "null"
+		if (value !== null && value !== undefined) queryStringElements[setting.name] = value;
 	});
 
-	const queryString = (new URLSearchParams(queryStringElements)).toString();
+	const params = new URLSearchParams(queryStringElements);
+	// each video source is its own repeated video= parameter
+	getVideoSources()
+		.filter((source) => source?.url)
+		.forEach((source) => params.append('video', encodeSourceForPermalink(source)));
+	const queryString = params.toString();
 
 	return new URL(`?${queryString}`, document.location.href);
 };
@@ -99,7 +108,7 @@ const registerHiddenSetting = (name, value) => {
 	});
 };
 
-/* eslint-disable import-x/prefer-default-export */
 export {
 	registerHiddenSetting,
+	buildLink,
 };

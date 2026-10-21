@@ -32,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	// get the slider elements
 	volumeSlider = document.querySelector('#ToggleMediaContainer .volume-slider');
 	volumeSliderInput = volumeSlider.querySelector('input');
+	// show the saved volume before the player is created
+	volumeSliderInput.value = Math.round(mediaVolume.value * 100);
 
 	// catch interactions with the volume slider (timeout handler)
 	// called on any interaction via 'input' (vs change) for immediate volume response
@@ -264,6 +266,8 @@ const setVolume = (newVolume) => {
 	if (player) {
 		player.volume = newVolume;
 	}
+	// keep the slider in step when the volume is set from somewhere else (the OSD menu)
+	if (volumeSliderInput) volumeSliderInput.value = Math.round(newVolume * 100);
 };
 
 const sliderChanged = () => {
@@ -371,3 +375,8 @@ const setTrackName = (fileName) => {
 };
 
 export default toggleMediaPlayback;
+
+export {
+	mediaPlaying,
+	mediaVolume,
+};

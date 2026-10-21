@@ -6,8 +6,6 @@ import {
 	currentDisplay,
 } from '../navigation.mjs';
 
-// upstream's static displays use nav IDs 0-12
-const VIDEO_NAV_BASE = 13;
 const VIDEO_CONTAINER_CLASS = 'video-display-container';
 
 const displays = new Map();
@@ -45,13 +43,13 @@ const buildDisplays = (sources) => {
 	const parent = anchor.parentElement;
 	if (!parent) return;
 
-	sources.forEach((source, index) => {
+	sources.forEach((source) => {
 		const elemId = `video-${source.id}`;
-		const navId = VIDEO_NAV_BASE + index;
 		const container = createContainer(elemId);
 		parent.insertBefore(container, anchor);
 
-		const display = new VideoDisplay(navId, elemId, source);
+		// -1: navigation adds it after the static displays and assigns its nav ID
+		const display = new VideoDisplay(-1, elemId, source);
 		displays.set(source.id, { display, container });
 		registerDisplay(display);
 		display.getData();

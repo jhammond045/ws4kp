@@ -1,4 +1,5 @@
 import Setting from './utils/setting.mjs';
+import { registerHiddenSetting } from './share.mjs';
 import { reset as resetScroll, addScreen as addScroll, hazards } from './currentweatherscroll.mjs';
 import { escapeHtml } from './utils/string.mjs';
 
@@ -83,9 +84,15 @@ const customTextEnable = new Setting('customTextEnable', {
 
 // initialize the custom text inputs on the page
 const init = () => {
-	// add the controls to the page
+	// add the controls to the page, or when there is no settings panel (the OSD menu edits these)
+	// register them so the permalink still includes them
 	const settingsSection = document.querySelector('#settings');
-	settingsSection.append(customTextEnable.generate(), customText.generate());
+	if (settingsSection) {
+		settingsSection.append(customTextEnable.generate(), customText.generate());
+	} else {
+		registerHiddenSetting(customTextEnable.shortName, customTextEnable);
+		registerHiddenSetting(customText.shortName, customText);
+	}
 	// clear the first run value
 	firstRun = false;
 	// call change enable with the current value to show/hide the url box
@@ -99,3 +106,8 @@ if (document.readyState === 'loading') {
 } else {
 	init();
 }
+
+export {
+	customText,
+	customTextEnable,
+};

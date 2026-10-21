@@ -67,7 +67,6 @@ const createOsdMenu = (dependencies = {}) => {
 		setPlaying: media?.setPlaying ?? (() => undefined),
 		getVolume: media?.getVolume ?? (() => 1),
 		setVolume: media?.setVolume ?? (() => undefined),
-		getVolumeOptions: media?.getVolumeOptions ?? (() => []),
 	};
 
 	const videoHelpers = {
@@ -87,6 +86,7 @@ const createOsdMenu = (dependencies = {}) => {
 		requestKioskEnable: actions.requestKioskEnable ?? (() => {}),
 		confirmUnitsChange: actions.confirmUnitsChange,
 		confirmIncludeVideosToggle: actions.confirmIncludeVideosToggle,
+		editCustomText: actions.editCustomText,
 	};
 
 	const model = createOsdMenuModel({

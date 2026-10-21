@@ -1,11 +1,11 @@
 import { json } from './modules/utils/fetch.mjs';
 import noSleep from './modules/utils/nosleep.mjs';
 import {
-	message as navMessage, isPlaying, resetStatuses, resetDisplays,
+	message as navMessage, isPlaying, resetStatuses, resetDisplays, getDisplays,
 } from './modules/navigation.mjs';
 import { latLonReceived, setLocationStatus, cancelWeather } from './modules/location.mjs';
 import { round2 } from './modules/utils/units.mjs';
-import { registerHiddenSetting } from './modules/share.mjs';
+import { registerHiddenSetting, buildLink } from './modules/share.mjs';
 import './modules/tabs.mjs';
 import { clearLocationRows } from './modules/headend.mjs';
 import settings from './modules/settings.mjs';
@@ -16,6 +16,11 @@ import { parseQueryString } from './modules/utils/setting.mjs';
 import { Settings } from './vendor/auto/luxon.mjs';
 import { resize, isIOS } from './modules/utils/scaling.mjs';
 import createOsdMenu from './modules/osd/osdMenu.mjs';
+import { openOsdModal } from './modules/osd/osdModal.mjs';
+import toggleMediaPlayback, { mediaPlaying, mediaVolume } from './modules/media.mjs';
+import { customText, customTextEnable } from './modules/custom-scroll-text.mjs';
+import { openVideoManager } from './modules/video/manager.mjs';
+import { getVideoSources, subscribeVideoSources, clearVideoSources } from './modules/video/sources.mjs';
 
 // set luxon's default locale to en-US as the forecast text and other hard coded assets are only available in English
 Settings.defaultLocale = 'en-US';
@@ -211,8 +216,10 @@ const init = async () => {
 	document.querySelector('#container').addEventListener('swiped-right', () => swipeCallBack('right'));
 
 	// register hidden settings for search and location query
-	registerHiddenSetting('latLonQuery', () => localStorage.getItem('latLonQuery'));
-	registerHiddenSetting('latLon', () => localStorage.getItem('latLon'));
+	// a location opened from a link isn't saved, so fall back to the address bar (Reset removes it from there)
+	const locationParam = (key) => localStorage.getItem(key) ?? new URLSearchParams(window.location.search).get(key);
+	registerHiddenSetting('latLonQuery', () => locationParam('latLonQuery'));
+	registerHiddenSetting('latLon', () => locationParam('latLon'));
 
 	// Station info is required for location lookup,
 	// Other static data missing is handled by the pages that use it
@@ -342,13 +349,231 @@ const btnNavigateMenuClick = () => {
 	return false;
 };
 
+// OSD menu actions, each opens an OSD modal
+const attemptCopyToClipboard = async (text) => {
+	if (!navigator?.clipboard?.writeText) return false;
+	try {
+		await navigator.clipboard.writeText(text);
+		return true;
+	} catch (error) {
+		console.warn('Unable to copy permalink to clipboard', error);
+		return false;
+	}
+};
+
+const openPermalinkModal = async () => {
+	// the same link as the share tab, including video sources
+	const url = buildLink().toString();
+	const container = document.createElement('div');
+	container.className = 'ws-osd-modal__permalink';
+
+	const instructions = document.createElement('p');
+	instructions.textContent = 'Copy this link to share your WeatherStar setup:';
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.value = url;
+	input.readOnly = true;
+	input.className = 'ws-osd-modal__permalink-input';
+	input.setAttribute('aria-label', 'Permalink');
+
+	const status = document.createElement('p');
+	status.className = 'ws-osd-modal__permalink-status';
+
+	container.append(instructions, input, status);
+
+	const copied = await attemptCopyToClipboard(url);
+	status.textContent = copied ? 'Copied to clipboard.' : 'Copy failed. Highlight the link and copy it by hand.';
+
+	const modalPromise = openOsdModal({
+		title: '--------- PERMALINK ---------',
+		body: container,
+		actions: [{ id: 'ok', label: '[ OK ]', primary: true }],
+		autofocus: 'ok',
+	});
+
+	requestAnimationFrame(() => {
+		input.focus();
+		input.select();
+	});
+
+	return modalPromise;
+};
+
+const openAboutModal = () => {
+	const wrapper = document.createElement('div');
+	wrapper.className = 'ws-osd-modal__about';
+
+	const versionText = document.getElementById('version')?.textContent?.trim?.() ?? '';
+	const versionParagraph = document.createElement('p');
+	versionParagraph.textContent = versionText ? `WeatherStar 4000+ v${versionText}` : 'WeatherStar 4000+';
+	const creditsParagraph = document.createElement('p');
+	creditsParagraph.textContent = 'A fan-made tribute to The Weather Channel\'s WeatherStar 4000 experience.';
+	const linkParagraph = document.createElement('p');
+	const repoLink = document.createElement('a');
+	repoLink.href = 'https://github.com/netbymatt/ws4kp';
+	repoLink.target = '_blank';
+	repoLink.rel = 'noopener noreferrer';
+	repoLink.textContent = 'GitHub Repository';
+	linkParagraph.append('Source code and credits: ', repoLink);
+
+	wrapper.append(versionParagraph, creditsParagraph, linkParagraph);
+
+	return openOsdModal({
+		title: '--------- ABOUT ---------',
+		body: wrapper,
+		actions: [{ id: 'ok', label: '[ OK ]', primary: true }],
+		autofocus: 'ok',
+	});
+};
+
+// clear everything this app saved and reload without any url parameters, which brings back every default
+// only this app's keys are removed, a static copy can share its origin (github.io) with other sites
+const resetAllSettings = () => {
+	clearVideoSources();
+	['Settings', 'latLon', 'latLonQuery', 'latLonFromGPS', 'play', 'firstRun'].forEach((key) => localStorage.removeItem(key));
+	Object.keys(localStorage)
+		.filter((key) => key.startsWith('display-enabled: ') || key.startsWith('ws.'))
+		.forEach((key) => localStorage.removeItem(key));
+	window.location.assign(window.location.pathname);
+};
+
+const confirmResetDefaults = async () => {
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__confirm';
+	const message = document.createElement('p');
+	message.textContent = 'Reset all settings, screens, location and video sources to their defaults? The page will reload.';
+	body.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- CONFIRM ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'reset', label: '[ RESET ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	if (result?.action === 'reset') resetAllSettings();
+};
+
+// the location box is moved into the modal while it is open, and back to its place on the page after
+const openLocationModal = async () => {
+	const queryContainer = document.querySelector('#divQuery');
+	if (!queryContainer) return;
+
+	const placeholder = document.createElement('div');
+	placeholder.hidden = true;
+	queryContainer.before(placeholder);
+	queryContainer.classList.add('ws-osd-location__content');
+
+	const wrapper = document.createElement('div');
+	wrapper.className = 'ws-osd-location';
+	const instructions = document.createElement('div');
+	instructions.className = 'ws-osd-location__instructions';
+	instructions.textContent = 'Enter your ZIP code or city and state';
+	wrapper.append(instructions, queryContainer);
+
+	const result = openOsdModal({
+		title: '--------- LOCATION ---------',
+		body: wrapper,
+		actions: [{ id: 'close', label: '[ CLOSE ]', primary: true }],
+		autofocus: 'close',
+	});
+
+	const input = queryContainer.querySelector(TXT_ADDRESS_SELECTOR);
+	requestAnimationFrame(() => input?.focus());
+
+	await result;
+
+	queryContainer.classList.remove('ws-osd-location__content');
+	placeholder.replaceWith(queryContainer);
+};
+
+const confirmUnitsChange = async (currentValue, nextValue) => {
+	if (currentValue === nextValue) return true;
+	const label = settings.units.values.find(([value]) => value === nextValue)?.[1] ?? nextValue;
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__confirm';
+	const message = document.createElement('p');
+	message.textContent = `Switch units to ${String(label).toUpperCase()}? The page will reload.`;
+	body.append(message);
+
+	const result = await openOsdModal({
+		title: '--------- CONFIRM ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'confirm', label: '[ SWITCH ]', primary: true },
+		],
+		autofocus: 'cancel',
+	});
+
+	return result?.action === 'confirm';
+};
+
+// custom-scroll-text.mjs, pipe characters separate messages that are picked at random
+const editCustomText = async () => {
+	const body = document.createElement('div');
+	body.className = 'ws-osd-modal__permalink';
+	const instructions = document.createElement('p');
+	instructions.textContent = 'Text to scroll. Separate several messages with |';
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.value = customText.value ?? '';
+	input.placeholder = 'Text to scroll';
+	input.className = 'ws-osd-modal__permalink-input';
+	input.setAttribute('aria-label', 'Custom text');
+	body.append(instructions, input);
+
+	const result = openOsdModal({
+		title: '--------- CUSTOM TEXT ---------',
+		body,
+		actions: [
+			{ id: 'cancel', label: '[ CANCEL ]' },
+			{ id: 'set', label: '[ SET ]', primary: true },
+		],
+		autofocus: 'set',
+	});
+	requestAnimationFrame(() => input.focus());
+
+	if ((await result)?.action === 'set') customText.value = input.value;
+};
+
 // the OSD menu is created on first use
 let osdMenuController = null;
 const toggleOsdMenu = () => {
 	if (!osdMenuController) {
 		try {
 			osdMenuController = createOsdMenu({
-				settings,
+				// the scroll text settings live in their own module
+				settings: { ...settings, customText, customTextEnable },
+				getDisplays,
+				media: {
+					isAvailable: () => document.querySelector('#ToggleMediaContainer')?.classList.contains('available') ?? false,
+					getPlaying: () => mediaPlaying.value === true,
+					setPlaying: (value) => {
+						if (!!value !== (mediaPlaying.value === true)) toggleMediaPlayback();
+					},
+					getVolume: () => mediaVolume.value,
+					setVolume: (value) => {
+						mediaVolume.value = value;
+					},
+				},
+				video: {
+					getSources: getVideoSources,
+					subscribe: subscribeVideoSources,
+					openManager: openVideoManager,
+				},
+				actions: {
+					openLocation: openLocationModal,
+					openVideoManager,
+					openPermalinkModal,
+					confirmResetDefaults,
+					openAboutModal,
+					confirmUnitsChange,
+					editCustomText,
+				},
 				navigation: {
 					isPlaying,
 					sendCommand: (command) => sendNavButtonMessage('navButton', command),
@@ -441,6 +666,8 @@ const updateFullScreenNavigate = () => {
 
 const documentKeydown = (e) => {
 	const { key } = e;
+	// the OSD menu and its modals handle their own keys
+	if (osdMenuController?.isOpen?.()) return false;
 
 	// Handle Ctrl+K to exit kiosk mode (even when other modifiers would normally be ignored)
 	if (e.ctrlKey && (key === 'k' || key === 'K')) {
@@ -477,9 +704,9 @@ const documentKeydown = (e) => {
 				btnNavigatePreviousClick();
 				return false;
 
-			case 'ArrowUp': // menu: stop playback and show the list of displays
+			case 'ArrowUp': // open or close the OSD setup menu
 				e.preventDefault();
-				btnNavigateMenuClick();
+				toggleOsdMenu();
 				return false;
 
 			case '0': // zero: reload the forecast data
