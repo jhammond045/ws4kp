@@ -141,18 +141,21 @@ const init = async () => {
 	const query = parsedParameters.latLonQuery ?? localStorage.getItem('latLonQuery');
 	const latLon = parsedParameters.latLon ?? localStorage.getItem('latLon');
 	// a location from a link replaces the saved one, and GPS, the same as a location entered here
+	// GPS is turned off only once the link's location is found, a link that can't be found leaves it on
 	const linkHasLocation = loadFromParsed || !!parsedParameters.latLonQuery;
-	if (linkHasLocation) localStorage.removeItem('latLonFromGPS');
 	// compared to the string, earlier versions could store 'false'
-	const fromGPS = localStorage.getItem('latLonFromGPS') === 'true';
+	let fromGPS = localStorage.getItem('latLonFromGPS') === 'true' && !linkHasLocation;
 
 	if (parsedParameters.latLonQuery && !parsedParameters.latLon) {
 		const txtAddress = document.querySelector(TXT_ADDRESS_SELECTOR);
 		txtAddress.value = parsedParameters.latLonQuery;
 		const geometry = await findLocation({ text: parsedParameters.latLonQuery });
 		if (geometry) {
+			localStorage.removeItem('latLonFromGPS');
 			doRedirectToGeometry(geometry);
 			adoptParams('latLonQuery');
+		} else {
+			fromGPS = localStorage.getItem('latLonFromGPS') === 'true';
 		}
 	} else if (latLon && !fromGPS) {
 		// update in-page search box if using cached data, or parsed parameter
@@ -163,14 +166,18 @@ const init = async () => {
 		// use lat-long lookup if that's all that was provided in the query string
 		if (loadFromParsed && parsedParameters.latLon && !parsedParameters.latLonQuery) {
 			const { lat, lon } = JSON.parse(latLon);
-			// saves the location
-			getForecastFromLatLon(lat, lon);
-			adoptParams('latLon');
+			// the location is saved, and removed from the address, once the weather service knows it
+			// a link that fails keeps it in the address, so a refresh tries again
+			getForecastFromLatLon(lat, lon, false, () => {
+				adoptParams('latLon');
+				removeAdoptedParams();
+			});
 		} else {
 			// otherwise use pre-stored data, or the link's location which is saved like one entered here
 			const parsedLatLon = JSON.parse(latLon);
 			const { lat, lon } = parsedLatLon ?? {};
 			if (loadFromParsed && Number.isFinite(lat) && Number.isFinite(lon)) {
+				localStorage.removeItem('latLonFromGPS');
 				localStorage.setItem('latLonQuery', query);
 				localStorage.setItem('latLon', JSON.stringify({ lat, lon }));
 				adoptParams('latLon', 'latLonQuery');
@@ -839,7 +846,8 @@ const gpsErrorText = (error) => {
 	}
 };
 
-const getForecastFromLatLon = (latitude, longitude, fromGps = false) => {
+// onSaved runs once the weather service has the location and it has been saved
+const getForecastFromLatLon = (latitude, longitude, fromGps = false, onSaved = undefined) => {
 	const txtAddress = document.querySelector(TXT_ADDRESS_SELECTOR);
 	txtAddress.value = `${round2(latitude, 4)}, ${round2(longitude, 4)}`;
 
@@ -856,6 +864,7 @@ const getForecastFromLatLon = (latitude, longitude, fromGps = false) => {
 			document.querySelector(BTN_GET_GPS_SELECTOR).classList.remove('active');
 		}
 		txtAddress.value = `${location.city}, ${location.state}`;
+		onSaved?.();
 	});
 };
 
