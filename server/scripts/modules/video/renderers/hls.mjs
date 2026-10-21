@@ -1,6 +1,8 @@
 import { isAllowedMediaUrl } from '../sources.mjs';
 
-const HLS_LIBRARY_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
+// hls.js 1.5.15, vendored (see vendor/hls.LICENSE.txt) and loaded only when the browser can't play HLS itself
+// relative to the page, so it works from a subpath; the build copies it to dist/scripts/vendor
+const HLS_LIBRARY_URL = 'scripts/vendor/hls.min.js';
 
 let hlsLibraryPromise;
 

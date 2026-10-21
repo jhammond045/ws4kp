@@ -201,7 +201,7 @@ It's also possible to enter kiosk mode using a permalink. First generate a [Perm
 WeatherStar can rotate through embedded video screens alongside the forecast. Each one appears after the weather screens, with its own title in the WeatherStar header, for as long as you set. Three kinds of source are supported, and the kind is picked from the URL:
 
 * **YouTube** (`youtube.com/watch`, `youtu.be`, `youtube.com/shorts`, or `youtube-nocookie.com`), played with YouTube's privacy-enhanced (`youtube-nocookie.com`) embed. The video must allow embedding.
-* **HLS** streams (`.m3u8`), played natively where the browser supports it, otherwise with [hls.js](https://github.com/video-dev/hls.js) loaded from a CDN the first time it's needed. The stream's server must allow cross-origin requests.
+* **HLS** streams (`.m3u8`), played natively where the browser supports it, otherwise with [hls.js](https://github.com/video-dev/hls.js), which ships with the app (`scripts/vendor/hls.min.js`) and loads the first time it's needed. The stream's server must allow cross-origin requests.
 * **Any other web page that allows framing**, shown in an iframe.
 
 Only `http://` and `https://` URLs are accepted.
