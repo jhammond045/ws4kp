@@ -6,7 +6,7 @@ This guide covers deploying WeatherStar 4000+ to GitHub Pages.
 
 - GitHub account
 - Repository pushed to GitHub
-- Node.js and npm installed locally
+- Node.js 20 or newer and npm, to build and test locally (the workflow itself uses Node 22)
 
 ## Setup (One-time)
 
@@ -24,8 +24,10 @@ The `.github/workflows/deploy.yml` file is already configured. Every push to `ma
 
 1. Install dependencies with `npm ci` (Node 22)
 2. Run `npm test` and `npm run lint`; a failure stops the deploy
-3. Build the SPA
+3. Build the site with `npm run build:spa` (the same as `npm run build`: `gulp/build.mjs` bundles the JavaScript, compiles the SCSS and copies the assets into `dist/`; see [BUILD_SPA.md](BUILD_SPA.md))
 4. Deploy `dist/` to GitHub Pages
+
+Pull requests run a separate check (`.github/workflows/lint-build.yaml`, Node 24) that tests, lints and builds without deploying.
 
 **Setup:**
 
@@ -63,7 +65,7 @@ GitHub Pages doesn't provide server-side proxy capabilities, so:
 To use a custom domain:
 
 1. Set the domain under **Settings** → **Pages** → **Custom domain**. With workflow deployments this setting is what counts; a `CNAME` file in the artifact is not required.
-2. If you also want a `CNAME` file in the build, put it in `server/` (not `dist/`, which the build wipes) and add `'server/CNAME'` to `otherFiles` in `gulp/publish-frontend.mjs`.
+2. If you also want a `CNAME` file in the build, put it in `server/` (not `dist/`, which the build wipes) and add `'server/CNAME'` to `otherFiles` in `gulp/build.mjs`.
 3. Configure DNS settings with your domain provider
 4. Enable HTTPS in GitHub Pages settings
 
@@ -105,6 +107,9 @@ Commit your changes and push to `main`. The workflow tests, lints, builds and de
 To test the build locally without deploying:
 
 ```bash
-npm run preview
-# Opens http://localhost:7654
+npm run build
+STATIC=1 DIST=1 npm start
+# then open http://localhost:8080/
 ```
+
+`STATIC=1` turns off the caching proxy, so the browser talks to the weather services directly, as it does on GitHub Pages. This serves the site from `/`; to check subpath hosting, copy `dist/` into a `ws4kp/` folder under any static file server and open `/ws4kp/`.

@@ -1,188 +1,127 @@
-# Building WeatherStar 4000+ as a Standalone SPA
+# Building WeatherStar 4000+ as a Static Site
 
-This document explains how to build and deploy WeatherStar 4000+ as a standalone Single Page Application (SPA) that can be hosted on any static file server.
+WeatherStar 4000+ can be built into a set of static files that run entirely in the browser and can be hosted on any static file server, including from a subpath such as `https://example.github.io/ws4kp/`.
 
-## Overview
+The build produces:
 
-The application can be built into a fully static SPA that runs entirely in the browser. This build includes:
-
-- Minified and bundled JavaScript
-- Compiled and minified CSS
-- Optimized HTML
-- All required assets (fonts, images, music)
-- Data files (stations, cities, etc.)
+- One bundled, minified JavaScript file (with a source map)
+- The compiled, minified CSS (with a source map)
+- Minified HTML
+- Fonts, images, music and the music playlist
+- The station and city data files
 
 ## Prerequisites
 
-- Node.js 20 or newer (CI uses 22)
+- Node.js 20 or newer (`engines.node` in `package.json`). The GitHub Pages workflow uses Node 22; the pull request check and the Dockerfiles use Node 24.
 - npm
 
-## Installation
-
-First, install all dependencies:
+## Install
 
 ```bash
 npm install
 ```
 
-## Build Commands
-
-### Build the SPA
-
-To build the complete standalone SPA:
+## Build
 
 ```bash
-npm run build:spa
-```
-
-This command will:
-
-1. Compile SCSS to CSS (`npm run build:css`)
-2. Bundle and minify JavaScript
-3. Minify HTML
-4. Copy all assets
-5. Generate playlist and data files
-
-Output directory: `./dist/`
-
-### Individual Build Steps
-
-You can also run individual build steps:
-
-```bash
-# Build CSS only
-npm run build:css
-
-# Build everything (same as build:spa but without CSS)
 npm run build
 ```
 
-## Preview the SPA Locally
+`npm run build:spa` is the same command under another name; the GitHub Pages workflow uses it.
 
-To build and preview the SPA on a local development server:
+Both run `npx gulp buildDist`, defined in `gulp/build.mjs`. It empties `dist/` (keeping `dist/readme.txt`) and then, in parallel:
+
+1. Bundles `server/scripts/ws.mjs` and everything it imports with webpack into `dist/resources/ws.min.js`
+2. Compiles `server/styles/scss/ws.scss` into `dist/resources/ws.min.css`
+3. Renders `views/index.ejs` to `dist/index.html` and minifies it
+4. Copies the fonts, images, music, `manifest.json`, `robots.txt`, icons, `.well-known/security.txt` and any custom scripts (`server/scripts/custom*.*`)
+5. Copies the data files from `datagenerators/output/` to `dist/data/`
+6. Writes `dist/playlist.json` from the music folder
+
+The build compiles the CSS itself, so you don't need to run `npm run build:css` first.
+
+### CSS for development mode
+
+`npm start` (development mode) serves `server/styles/ws.min.css`, which is committed to the repository. After changing any SCSS file, update it with:
 
 ```bash
-npm run preview
+npm run build:css      # once
+npm run watch:css      # rebuild on every change
 ```
 
-This will:
+Commit the updated `ws.min.css` and `ws.min.css.map` along with the SCSS change.
 
-1. Build the complete SPA
-2. Start an HTTP server on `http://localhost:7654`
-3. Disable caching for easy development
-4. Enable CORS for API requests
+## Preview the build locally
 
-Or, to just serve an already-built SPA:
+Serve `dist/` with the bundled Express server. `STATIC=1` turns off the caching proxy, so the browser calls the weather services directly, the same as on a static host:
 
 ```bash
-npm run serve:spa
+npm run build
+STATIC=1 DIST=1 npm start
 ```
 
-## Deployment
+Then open `http://localhost:8080/`. Set `WS4KP_PORT` to use another port, for example `WS4KP_PORT=3000 STATIC=1 DIST=1 npm start`.
 
-After running `npm run build:spa`, the `./dist/` directory contains a complete standalone application that can be deployed to any static hosting service:
+## Deploying
 
-### Static Hosting Options
+After `npm run build`, the `dist/` directory is the whole site. Upload its contents to any static host:
 
-- **Netlify**: Drop the `dist` folder or connect to Git
-- **Vercel**: Deploy via CLI or Git integration
-- **GitHub Pages**: Use the included workflow; see [DEPLOY_GITHUB_PAGES.md](DEPLOY_GITHUB_PAGES.md)
-- **AWS S3**: Upload to S3 bucket with static website hosting
-- **Cloudflare Pages**: Connect to Git repository
-- **Any web server**: Copy `dist` contents to web root
+- **GitHub Pages:** use the included workflow; see [DEPLOY_GITHUB_PAGES.md](DEPLOY_GITHUB_PAGES.md)
+- **Netlify, Vercel, Cloudflare Pages:** upload `dist/`, or connect the repository with `npm run build` as the build command and `dist` as the output directory
+- **AWS S3, nginx, Apache or any web server:** copy the contents of `dist/` to the web root
 
-### Important Notes for Deployment
+### Notes
 
-1. **CORS Configuration**: The app makes requests to external weather APIs (api.weather.gov). Ensure your hosting platform allows CORS requests or use a proxy.
+1. **Weather services:** The browser calls `api.weather.gov`, the SPC outlooks, the radar image archive and the HRRR model data directly. These allow cross-origin requests, so no proxy is needed.
+2. **HTTPS:** GPS location and fullscreen need `https://` (or `localhost`).
+3. **Subpath hosting:** The build works from a subpath such as `/ws4kp/` because every asset and data URL is relative. The app is a single page with no client-side routes, so no fallback route is needed.
+4. **Cache headers (optional):**
+   - `index.html`: a few minutes (`max-age=300`)
+   - `resources/*.js`, `resources/*.css`: these keep the same name from one version to the next, so keep this short too, or purge the cache after a deploy
+   - Images, fonts, music: long (`max-age=31536000`)
 
-2. **HTTPS Required**: Many browser features (like geolocation and fullscreen) require HTTPS.
-
-3. **Cache Headers**: Recommended cache settings:
-
-   - `index.html`: 5-10 minutes (`max-age=300`)
-   - `resources/*.js`, `resources/*.css`: 1 month (`max-age=2592000`)
-   - Images, fonts: 1 year (`max-age=31536000`)
-   - Music files: 1 year (`max-age=31536000`)
-
-4. **Subpath hosting**: The build works from a subpath such as `/ws4kp/` as long as asset and data URLs stay relative. The app has a single page and no client-side routes, so no fallback route is needed.
-
-## Directory Structure (after build)
+## Directory structure (after build)
 
 ```
 dist/
-├── index.html              # Main application entry point
-├── manifest.json           # PWA manifest
-├── robots.txt              # SEO robots file
-├── data/                   # Weather station and city data
-│   ├── stations.json
-│   ├── regionalcities.json
-│   └── travelcities.json
-├── resources/              # Bundled and minified code
-│   ├── ws.min.js          # Application JavaScript bundle
-│   ├── vendor.min.js      # Third-party libraries
-│   └── ws.min.css         # Compiled styles
-├── fonts/                  # Star4000 font family
-├── images/                 # All UI assets, icons, backgrounds
-├── music/                  # Background music files
-└── playlist.json          # Music playlist configuration
+├── index.html
+├── manifest.json
+├── robots.txt
+├── playlist.json          # music playlist
+├── data/                  # stations.json, regionalcities.json, travelcities.json
+├── resources/
+│   ├── ws.min.js          # the whole app, one bundle
+│   ├── ws.min.js.map
+│   ├── ws.min.css
+│   └── ws.min.css.map
+├── fonts/                 # Star4000 fonts
+├── images/
+├── music/
+└── scripts/               # custom scripts, when there are any
 ```
-
-## Environment Variables
-
-The build process supports the following environment variables (optional):
-
-- `BUCKET`: S3 bucket for AWS deployment
-- `BUCKET_PREVIEW`: S3 bucket for preview/staging
-- `DISTRIBUTION_ID`: CloudFront distribution ID
-- `DISTRIBUTION_ID_PREVIEW`: CloudFront preview distribution ID
-
-These are only needed for AWS S3/CloudFront deployment.
-
-## Development Workflow
-
-1. **Make changes** to source files in `server/scripts/`, `server/styles/`, etc.
-2. **Test locally** with the Node.js server: `npm run dev`
-3. **Build SPA**: `npm run build:spa`
-4. **Preview SPA**: `npm run serve:spa`
-5. **Deploy** the `dist/` directory to your hosting platform
 
 ## Troubleshooting
 
-### Build fails with "Module not found"
+### Build fails with "Cannot find module"
 
-Run `npm install` to ensure all dependencies are installed.
+Run `npm install`.
 
-### CSS not updating
+### Style changes don't show up
 
-Delete `server/styles/main.css` and run `npm run build:css` again.
+- In development mode (`npm start`), run `npm run build:css`; that mode serves the committed `server/styles/ws.min.css`.
+- For the static build, run `npm run build` again and reload without the cache.
 
-### Changes not appearing in preview
+### Data files or radar tiles 404 on the host
 
-- Clear browser cache
-- Ensure you ran `npm run build:spa` after making changes
-- Check that `http-server` is serving the `dist` directory
+Something is using a root-absolute path (`/data/...`). Every path in the app must be relative; see [Base URL Configuration](DEPLOY_GITHUB_PAGES.md#base-url-configuration).
 
-### CORS errors in production
+## Changing the build
 
-Configure your hosting platform to allow CORS requests or set up a proxy for API calls.
-
-## Advanced: Custom Build Configuration
-
-The build process is configured in:
-
-- `gulpfile.mjs` - Main build orchestration
-- `gulp/publish-frontend.mjs` - Build tasks and AWS deployment
-- `package.json` - Build scripts
-
-To customize the build:
-
-1. Edit `gulp/publish-frontend.mjs` to modify build tasks
-2. Update `webpackOptions` for JavaScript bundling configuration
-3. Modify `htmlmin` options in `compressHtml` for HTML minification settings
+- `gulpfile.mjs` exports the gulp tasks
+- `gulp/build.mjs` defines the build: `webpackOptions` for the JavaScript bundle, `otherFiles` for extra files to copy, and the `htmlmin` options in `compressHtml`
+- `package.json` holds the npm scripts
 
 ## Support
-
-For issues or questions:
 
 - This fork (OSD menu, embedded video, static build): https://github.com/jhammond045/ws4kp/issues
 - Upstream WeatherStar 4000+: https://github.com/netbymatt/ws4kp/issues

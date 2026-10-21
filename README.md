@@ -80,9 +80,41 @@ These work while the page itself has focus (click on the weather display first i
 
 On a touch screen, swipe left or right on the weather display for the next or previous screen.
 
+### OSD menu
+
+Settings live in an on-screen menu drawn inside the weather display, in the style of a cable box menu. Open it with the gear button below the display or the `↑` key. The forecast stops rotating while the menu is open and carries on when it closes.
+
+Categories are on the left and their items on the right:
+
+| Category | Items |
+|---|---|
+| SET UP WEATHER | Location, Units, Display Mode |
+| SCREENS | Screen Speed, and an on/off row for each screen |
+| VIDEO SOURCES | Video Sources (opens the [video manager](#video-screens)), and a row for each source |
+| AUDIO | Music, Music Volume (shown when music is available) |
+| STYLE | Scan Lines, Scan Line Style, Kiosk Mode, Sticky Kiosk, Custom Text, Edit Custom Text |
+| SYSTEM | Copy Permalink, Reset to Defaults, About |
+
+| Key | Action |
+|---|---|
+| Gear button or `↑` | Open the menu |
+| `↑` `↓` (also `Page Up` / `Page Down`) | Select a category or item |
+| `←` `→` | Set the selected item's value |
+| `Tab` / `Shift-Tab` | Switch between the categories and the items |
+| `Enter` or `Space` | Run the item's action (open a dialog, turn an on/off item on or off) |
+| `Esc` | Close the open dialog, or the menu when no dialog is open |
+
+The legend at the bottom of the menu shows the same keys as `^ v` (select), `< >` (set), ENTER (action) and ESC (back).
+
+With a mouse, click a category or item, use the `‹` `›` buttons to change a value, and the page arrows to move through a long list such as SCREENS. Clicking outside the menu, the gear button again, or the `✕` button also closes it.
+
+Some items open a dialog (Location, the video manager, Copy Permalink, Reset to Defaults, Kiosk Mode). In a dialog, `Tab` moves between its fields and buttons without leaving the dialog, `←` `→` move between its buttons, `Enter` presses the highlighted button, and `Esc` cancels. In the Location dialog, `Esc` with search suggestions showing closes the suggestions first.
+
+Reset to Defaults clears every setting, the selected screens, the saved location and the video sources, then reloads the page.
+
 ### Settings
 
-These are found in the setup menu, which opens inside the weather display from the gear button below it or the `↑` key. Use the arrow keys or the mouse to move through it, `Tab` to switch between the categories and their items, `Enter` to choose, and `Esc` to close a dialog, or the menu itself when no dialog is open.
+These are found in the [OSD menu](#osd-menu).
 
 **Speed:** Controls the playback speed of the displays, from "Very Fast" (2x) to "Very Slow" (0.67x) with "Normal" being 1x. Note: if editing the permalink the multipliers are inverse with Very Fast = 0.5 and Very Slow = 1.5. These are the multipliers that are applied directly to the time delays in the slide deck.
 
@@ -92,7 +124,7 @@ These are found in the setup menu, which opens inside the weather display from t
 - Widescreen Enhanced: Stretches as above, and makes use of the additional space to provide wider maps, more weather data and/or additional days in the forecast
 - Portrait Enhanced: Rotates the screen to a 16:9 portrait orientation and enhances the original displays by adjusting them to fit the new orientation and filling with additional data where possible
 
-**Kiosk:** Immediately activates kiosk mode, which hides all settings. Exit by refreshing the page or using `Ctrl-K`. (Kiosk mode is similar to clicking the "Fullscreen" icon, but scales to the current browser viewport instead of activating the browser's actual "Fullscreen" mode.)
+**Kiosk Mode:** Turns on kiosk mode, which hides the toolbar and everything else on the page around the weather display. A warning dialog explains how to get back out first, and kiosk mode starts when you choose ENABLE. Exit by refreshing the page or using `Ctrl-K`. (Kiosk mode is similar to clicking the "Fullscreen" icon, but scales to the current browser viewport instead of activating the browser's actual "Fullscreen" mode.)
 
 **Sticky Kiosk:** When enabled, stores the kiosk mode preference in local storage so the page automatically enters kiosk mode (maximizing the size of the main weather display without any settings) on subsequent visits. This feature is designed primarily for **iPhone and iPad users** who want to create a Home Screen app experience, since Mobile Safari doesn't support PWA installation via manifest.json or the Fullscreen API:
 
@@ -102,14 +134,14 @@ These are found in the setup menu, which opens inside the weather display from t
 2. Adjust the name as desired and tap **Add**
 3. Launch the newly-created Home Screen shortcut
 4. Configure all settings
-5. Tap to enable **Sticky Kiosk**
+5. Open the menu with the gear button and, under STYLE, turn on **Sticky Kiosk**
 6. _Make sure everything is configured exactly like you want it!_
-7. Tap **Kiosk**
+7. Turn on **Kiosk Mode** and choose ENABLE in the warning dialog
 
 **For Android and Desktop browsers:** The included `manifest.json` file enables PWA (Progressive Web App) installation. To get the best app-like experience:
 
 1. Configure all your settings first (ignore the "Kiosk" and "Sticky Kiosk" settings)
-2. Create a permalink using the "Copy Permalink" feature and manually add `&kiosk=true` to the end
+2. Create a permalink from the Share tab (or SYSTEM, Copy Permalink in the menu) and manually add `&kiosk=true` to the end
 3. Open the edited permalink URL in your browser
 4. Look for browser prompts to "Install" or "Add to Home Screen" from the kiosk-enabled URL
 5. The PWA will launch directly into kiosk mode (without forcing kiosk mode when accessed from the browser)
@@ -140,7 +172,7 @@ The text is shown exactly as typed; HTML tags are not interpreted.
 
 ### Sharing a permalink (bookmarking)
 
-Selected displays, the forecast city and most settings are sticky from one session to the next. However if you would like to share your exact configuration or bookmark it, open the Share tab. The permalink is shown in a read-only box and the "Copy permalink" button copies it to your clipboard. (If your browser doesn't support clipboard transfers directly the button reads "Get Permalink" and selects the link so you can copy it by hand.) The link includes your selected displays, settings and location. You can then share this link or add it to your bookmarks.
+Selected displays, the forecast city and most settings are sticky from one session to the next. However if you would like to share your exact configuration or bookmark it, open the Share tab. The permalink is shown in a read-only box and the "Copy permalink" button copies it to your clipboard. (If your browser doesn't support clipboard transfers directly the button reads "Get Permalink" and selects the link so you can copy it by hand.) The link includes your selected displays, settings, location and [video sources](#video-screens). You can then share this link or add it to your bookmarks.
 
 Your permalink will be very long. Here is an example for the Orlando International Airport:
 ```
@@ -158,11 +190,43 @@ Permalinks created with older versions, which used keys such as `travel-checkbox
 
 ### Kiosk mode
 
-Kiosk mode can be activated by the Kiosk checkbox on the Settings tab. This will start Weatherstar in a fullscreen-like view without the play/volume/etc toolbar and scaled to fill the entire space. This does not activate the browser's fullscreen or kiosk mode. Those can only be activated by user interaction or by launching the browser with specific parameters such as `--start-fullscreen` or `--kiosk`.
+Kiosk mode can be turned on from the [OSD menu](#osd-menu): STYLE, Kiosk Mode. There is no Settings tab any more. A warning dialog says how to leave kiosk mode, and choosing ENABLE starts it. This will start Weatherstar in a fullscreen-like view without the play/volume/etc toolbar and scaled to fill the entire space. This does not activate the browser's fullscreen or kiosk mode. Those can only be activated by user interaction or by launching the browser with specific parameters such as `--start-fullscreen` or `--kiosk`.
 
-When using kiosk mode (via the checkbox), there is no on-screen way to exit the fullscreen-like view of weatherstar. Press `Ctrl-K` or reload the page to return to the normal view (unless [Sticky Kiosk](#settings) is enabled). This is deliberate as a browser's kiosk mode is intended not to be exited or significantly modified. A separate full-screen icon is available in the tool bar to go full-screen on a laptop or mobile browser.
+When using kiosk mode (via the menu), there is no on-screen way to exit the fullscreen-like view of weatherstar. Press `Ctrl-K` or reload the page to return to the normal view (unless [Sticky Kiosk](#settings) is enabled). This is deliberate as a browser's kiosk mode is intended not to be exited or significantly modified. A separate full-screen icon is available in the tool bar to go full-screen on a laptop or mobile browser.
 
 It's also possible to enter kiosk mode using a permalink. First generate a [Permalink](#sharing-a-permalink-bookmarking), then to the end of it add `&kiosk=true`. Opening this link will load all of the selected displays included in the Permalink, enter kiosk mode immediately upon loading and start playing the forecast.
+
+### Video screens
+
+WeatherStar can rotate through embedded video screens alongside the forecast. Each one appears after the weather screens, with its own title in the WeatherStar header, for as long as you set. Three kinds of source are supported, and the kind is picked from the URL:
+
+* **YouTube** (`youtube.com/watch`, `youtu.be`, `youtube.com/shorts`, or `youtube-nocookie.com`), played with YouTube's privacy-enhanced (`youtube-nocookie.com`) embed. The video must allow embedding.
+* **HLS** streams (`.m3u8`), played natively where the browser supports it, otherwise with [hls.js](https://github.com/video-dev/hls.js) loaded from a CDN the first time it's needed. The stream's server must allow cross-origin requests.
+* **Any other web page that allows framing**, shown in an iframe.
+
+Only `http://` and `https://` URLs are accepted.
+
+To add, change, reorder or remove sources, open the menu, go to VIDEO SOURCES and choose **Video Sources**. Each source has:
+
+* **Title**, shown in the header (long titles are shortened to fit)
+* **URL** of the video, stream or page
+* **Duration** in seconds that the screen stays up (5 to 3600, default 20)
+* **Muted** (on by default; browsers usually block sound that starts without a click) and **Loop**
+
+Changes are saved in the browser right away. With no sources, the forecast rotates as usual.
+
+Each player starts loading a few seconds before its screen comes up. If a source doesn't load within about 10 seconds, or fails while playing (a removed YouTube video, a dead stream), its screen shows a VIDEO UNAVAILABLE card for its duration and the forecast carries on. After two failures in a row the source is skipped until it loads again. Videos pause while the browser tab is hidden.
+
+Video sources are always included in the [permalink](#sharing-a-permalink-bookmarking), as one `video=` parameter per source. Opening such a link replaces your saved sources with the link's and removes them from the address bar, so later edits stick when you refresh. Sources can also be written out by hand with numbered keys, which also work as `WSQS_` [environment variables](#default-query-string-parameters-environment-variables):
+
+```
+?video_0_title=Downtown&video_0_url=https://www.youtube.com/watch?v=M7lc1UVf-VE&video_0_dur=30
+WSQS_video_0_title=Downtown
+WSQS_video_0_url=https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+WSQS_video_0_dur=30
+```
+
+The other keys are `video_N_muted`, `video_N_loop` and `video_N_type` (`auto`, `youtube`, `hls` or `iframe`).
 
 ### Phone App
 
