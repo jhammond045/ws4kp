@@ -305,7 +305,7 @@ class VideoDisplay extends WeatherDisplay {
 			};
 		}
 		const Renderer = RENDERERS[type] || RENDERERS.iframe;
-		const player = new Renderer(source);
+		const player = new Renderer(source, { waitForLoad: this.fallback });
 		this.player = player;
 		// errors after the player is up (a removed YouTube video, a dead stream) also show the card
 		player.onFail = (error) => {

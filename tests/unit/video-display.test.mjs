@@ -45,7 +45,7 @@ globalThis.clearInterval = (id) => {
 
 const { default: VideoDisplay, RENDERERS } = await import('../../server/scripts/modules/video/display.mjs');
 const { diffSources } = await import('../../server/scripts/modules/video/index.mjs');
-const { iframeSandbox } = await import('../../server/scripts/modules/video/renderers/iframe.mjs');
+const { default: IframeRenderer, iframeSandbox } = await import('../../server/scripts/modules/video/renderers/iframe.mjs');
 const { default: STATUS } = await import('../../server/scripts/modules/status.mjs');
 
 let constructed = 0;
@@ -275,3 +275,39 @@ test('a removed YouTube video (error 100) shows the card without a fallback', as
 	assert.equal(constructed, 0);
 	display.dispose();
 });
+
+// the real iframe renderer with a frame whose load event never fires, like a page holding an MJPEG stream open
+const withHangingIframe = (run) => async () => {
+	const { createElement } = document;
+	document.createElement = () => ({ addEventListener() {}, remove() {} });
+	RENDERERS.iframe = IframeRenderer;
+	try {
+		await run();
+	} finally {
+		document.createElement = createElement;
+		RENDERERS.iframe = StubRenderer;
+	}
+};
+
+test('a web page that never fires load still loads', withHangingIframe(async () => {
+	const display = makeDisplay();
+	display.playerContainer.append = () => {};
+	await display.getData();
+	assert.equal(display.status, STATUS.loaded);
+	display.dispose();
+}));
+
+test('a plain YouTube embed fallback that never fires load times out to the card', withHangingIframe(async () => {
+	withYouTubeStub(() => Promise.reject(Object.assign(new Error('YouTube player error: 150'), { fallback: true })));
+	const display = makeDisplay(youtubeSource);
+	display.playerContainer.append = () => {};
+	const loading = display.getData();
+	await new Promise((resolve) => { setImmediate(resolve); });
+	assert.equal(display.fallback, true);
+	assert.equal(display.status, STATUS.loading);
+	mock.timers.tick(10_000);
+	await loading;
+	assert.equal(display.status, STATUS.failed);
+	assert.equal(display.statusContainer.textContent, 'VIDEO UNAVAILABLE');
+	display.dispose();
+}));

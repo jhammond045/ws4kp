@@ -9,8 +9,11 @@ export const iframeSandbox = (src, origin) => {
 };
 
 class IframeRenderer {
-	constructor(source) {
+	// waitForLoad: mount resolves on the frame's load event instead of right away, only for the plain YouTube embed fallback
+	// a user's web page can keep a request open forever (a camera's MJPEG stream) and never fire load
+	constructor(source, { waitForLoad = false } = {}) {
 		this.source = { ...source };
+		this.waitForLoad = waitForLoad;
 		this.iframe = null;
 		this.container = null;
 		// paused iframes are emptied, there's no way to pause an unknown page
@@ -36,15 +39,15 @@ class IframeRenderer {
 		this.iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
 		this.iframe.allowFullscreen = true;
 		this.iframe.title = this.source.title || 'Embedded video';
-		// resolves once the page has loaded, so a host that never answers runs into the display's load timeout
+		// the fallback resolves once the page has loaded, so a host that never answers runs into the display's load timeout
 		// a page that refuses to be framed still fires load, the browser shows its error page in the frame
-		const loaded = new Promise((resolve) => {
+		const loaded = this.waitForLoad && new Promise((resolve) => {
 			this.iframe.addEventListener('load', resolve, { once: true });
 		});
 		this.setSource();
 
 		this.container.append(this.iframe);
-		await loaded;
+		if (loaded) await loaded;
 	}
 
 	async prewarm() {
