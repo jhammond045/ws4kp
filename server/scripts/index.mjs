@@ -235,11 +235,7 @@ const init = async () => {
 		document.querySelector(BTN_GET_GPS_SELECTOR).classList.remove('active');
 		setLocationStatus();
 
-		// a location in the address would be loaded again on a refresh, other parameters (kiosk, settings) are kept
-		const url = new URL(window.location.href);
-		url.searchParams.delete('latLonQuery');
-		url.searchParams.delete('latLon');
-		window.history.replaceState(null, '', url);
+		removeLocationParams();
 	});
 
 	// swipe functionality
@@ -294,6 +290,16 @@ const findLocation = async (search) => {
 	}
 };
 
+// a location in the address would be loaded again on a refresh, other parameters (kiosk, settings) are kept
+// used when the location is reset or the user picks their own, including over a link's location that failed or is still loading
+const removeLocationParams = () => {
+	const url = new URL(window.location.href);
+	if (!url.searchParams.has('latLonQuery') && !url.searchParams.has('latLon')) return;
+	url.searchParams.delete('latLonQuery');
+	url.searchParams.delete('latLon');
+	window.history.replaceState(null, '', url);
+};
+
 const autocompleteOnSelect = async (suggestion) => {
 	const geometry = await findLocation({
 		text: suggestion.value,
@@ -303,6 +309,7 @@ const autocompleteOnSelect = async (suggestion) => {
 
 	localStorage.removeItem('latLonFromGPS');
 	document.querySelector(BTN_GET_GPS_SELECTOR).classList.remove('active');
+	removeLocationParams();
 	doRedirectToGeometry(geometry);
 };
 
@@ -859,6 +866,7 @@ const getForecastFromLatLon = (latitude, longitude, fromGps = false, onSaved = u
 		localStorage.setItem('latLonQuery', query);
 		if (fromGps) {
 			localStorage.setItem('latLonFromGPS', 'true');
+			removeLocationParams();
 		} else {
 			localStorage.removeItem('latLonFromGPS');
 			document.querySelector(BTN_GET_GPS_SELECTOR).classList.remove('active');
