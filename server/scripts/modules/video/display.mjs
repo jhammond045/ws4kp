@@ -8,9 +8,15 @@ import HlsRenderer from './renderers/hls.mjs';
 const MIN_DURATION = 5;
 const DEFAULT_TITLE = 'Video';
 const MAX_TITLE_LENGTH = 18;
+// a source that hasn't loaded within its preload lead time plus this many seconds is shown as unavailable
+const LOAD_TIMEOUT_EXTRA_SEC = 5;
+// after this many failed loads in a row the source is left out of rotation until a load succeeds
+const MAX_FAILURES = 2;
+const UNAVAILABLE_MESSAGE = 'VIDEO UNAVAILABLE';
 const preconnectedOrigins = new Set();
 
-const RENDERERS = {
+// exported so tests can swap in stub renderers
+export const RENDERERS = {
 	youtube: YouTubeRenderer,
 	hls: HlsRenderer,
 	iframe: IframeRenderer,
@@ -47,6 +53,9 @@ class VideoDisplay extends WeatherDisplay {
 		this.failed = false;
 		this.failureCount = 0;
 		this.lastError = null;
+		this.loading = null;
+		this.loadToken = null;
+		this.disposed = false;
 		this.buildTiming();
 		this.prewarmTimeout = null;
 		this.displayTitle = initialTitle;
@@ -161,29 +170,70 @@ class VideoDisplay extends WeatherDisplay {
 		this.statusContainer.dataset.state = error ? 'error' : 'info';
 	}
 
-	async getData() {
-		const superResult = super.getData(undefined, false);
+	async getData(weatherParameters, refresh) {
+		const superResult = super.getData(weatherParameters, refresh);
 		if (!superResult) return;
 
+		// a data refresh keeps a working player, so the video on screen isn't torn down
+		if (this.ready && this.player && !this.failed) {
+			this.setStatus(STATUS.loaded);
+			return;
+		}
+		if (this.loading) {
+			await this.loading;
+			return;
+		}
+		await this.load();
+	}
+
+	load() {
+		const token = {};
+		this.loadToken = token;
 		this.ready = false;
 		this.failed = false;
 		this.lastError = null;
 		this.setStatus(STATUS.loading);
 
-		try {
-			await this.preparePlayer();
+		let timeout;
+		const timeoutSec = Math.max(0, Number(this.source.preloadSec) || 0) + LOAD_TIMEOUT_EXTRA_SEC;
+		this.loading = Promise.race([
+			this.preparePlayer(),
+			new Promise((resolve, reject) => {
+				timeout = setTimeout(() => reject(new Error(`Timed out after ${timeoutSec}s`)), timeoutSec * 1000);
+			}),
+		]).then(() => {
+			if (this.loadToken !== token) return;
 			this.ready = true;
+			this.failureCount = 0;
 			this.setStatus(STATUS.loaded);
 			this.updateStatusMessage('');
-		} catch (error) {
-			this.failed = true;
-			this.lastError = error;
-			this.failureCount += 1;
-			console.error('Video prewarm failed', error);
-			this.setStatus(STATUS.failed);
-			this.updateStatusMessage('Video unavailable', { error: true });
-			this.disposePlayer();
-		}
+		}, (error) => {
+			if (this.loadToken !== token) return;
+			this.fail(error);
+		}).finally(() => {
+			clearTimeout(timeout);
+			if (this.loadToken === token) this.loading = null;
+		});
+		return this.loading;
+	}
+
+	// show the unavailable card, rotation shows it for the source's duration and then moves on
+	fail(error) {
+		this.loadToken = null;
+		this.loading = null;
+		this.ready = false;
+		this.failed = true;
+		this.lastError = error;
+		this.failureCount += 1;
+		console.error(`Video "${this.source.title}" unavailable: ${error?.message}`);
+		this.disposePlayer();
+		this.setStatus(STATUS.failed);
+		this.updateStatusMessage(UNAVAILABLE_MESSAGE, { error: true });
+	}
+
+	// a failed source is still shown, so the card appears, until it fails twice in a row
+	isEnabledForRotation() {
+		return this.failureCount < MAX_FAILURES;
 	}
 
 	async preparePlayer() {
@@ -193,17 +243,22 @@ class VideoDisplay extends WeatherDisplay {
 		const type = this.mode || detectSourceType(this.source);
 		ensurePreconnect(type, this.source.url);
 		const Renderer = RENDERERS[type] || RENDERERS.iframe;
-		this.player = new Renderer(this.source);
-		await this.player.mount(this.playerContainer);
-		if (this.player.prewarm) {
+		const player = new Renderer(this.source);
+		this.player = player;
+		// errors after the player is up (a removed YouTube video, a dead stream) also show the card
+		player.onFail = (error) => {
+			if (this.player === player) this.fail(error);
+		};
+		await player.mount(this.playerContainer);
+		// a timeout, newer load or dispose replaced this player while it was mounting
+		if (this.player !== player) return;
+		if (player.prewarm) {
 			try {
-				await this.player.prewarm();
+				await player.prewarm();
 			} catch {
 				// Ignore failures during prewarm; renderer will attempt playback later.
 			}
 		}
-		this.updateStatusMessage('');
-		this.scheduleStandbyPrewarm();
 	}
 
 	drawCanvas() {
@@ -219,8 +274,16 @@ class VideoDisplay extends WeatherDisplay {
 	}
 
 	hideCanvas() {
-		this.pausePlayback();
+		// navigation hides every display on each change, only act on the one that was showing
+		const wasShowing = this.elem?.classList.contains('show');
 		super.hideCanvas();
+		if (!wasShowing || this.disposed) return;
+		this.pausePlayback();
+		// the card was shown, try the source again before its next turn
+		if (this.failed) {
+			this.getData();
+			return;
+		}
 		this.scheduleStandbyPrewarm();
 	}
 
@@ -232,6 +295,8 @@ class VideoDisplay extends WeatherDisplay {
 	startPlayback() {
 		this.clearPrewarmTimer();
 		if (!this.ready || this.failed || !this.player?.play) return;
+		// rotation continues in a hidden tab, playback starts when the tab is shown again
+		if (document.visibilityState === 'hidden') return;
 		const playResult = this.player.play();
 		if (playResult?.catch) {
 			playResult.catch(() => {});
@@ -244,34 +309,39 @@ class VideoDisplay extends WeatherDisplay {
 		if (pauseResult?.catch) {
 			pauseResult.catch(() => {});
 		}
-		this.scheduleStandbyPrewarm();
 	}
 
 	dispose() {
+		this.disposed = true;
+		this.loadToken = null;
 		this.pausePlayback();
 		this.disposePlayer();
+		this.clearAutoReload();
+		clearInterval(this.navInterval);
+		this.navInterval = undefined;
 	}
 
 	updateSource(source) {
 		const nextMode = detectSourceType(source);
 		const modeChanged = nextMode !== this.mode;
+		// the title and duration don't touch the player, so the video on screen keeps playing
+		const playerChanged = Object.keys({ ...source, ...this.source })
+			.some((key) => key !== 'title' && key !== 'durationSec' && source[key] !== this.source[key]);
 		this.source = { ...source };
 		this.mode = nextMode;
 		this.buildTiming();
 		this.updateHeader();
-		if (!this.ready) return;
+		if (!playerChanged) return;
+		if (!this.ready) {
+			// retry a failed or loading source with the new settings
+			if (this.failed || this.loading) this.load();
+			return;
+		}
 		if (modeChanged || !this.player || !this.player.update) {
-			this.ready = false;
-			this.getData();
+			this.load();
 			return;
 		}
 		this.player.update(this.source);
-		if (this.player.prewarm) {
-			const result = this.player.prewarm();
-			if (result?.catch) {
-				result.catch(() => {});
-			}
-		}
 		this.scheduleStandbyPrewarm();
 	}
 
@@ -291,14 +361,14 @@ class VideoDisplay extends WeatherDisplay {
 		const leadSeconds = Number(this.source?.preloadSec ?? 0);
 		if (!Number.isFinite(leadSeconds) || leadSeconds <= 0) return;
 		if (this.active) return;
+		// once per hide, so the next show starts from the beginning
 		this.prewarmTimeout = setTimeout(() => {
 			this.prewarmTimeout = null;
-			if (!this.player || !this.player.prewarm) return;
+			if (!this.player || !this.player.prewarm || this.active) return;
 			const result = this.player.prewarm();
 			if (result?.catch) {
 				result.catch(() => {});
 			}
-			this.scheduleStandbyPrewarm();
 		}, leadSeconds * 1000);
 	}
 

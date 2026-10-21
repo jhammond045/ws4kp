@@ -107,6 +107,10 @@ const displayNavMessage = (myMessage) => {
 	if (myMessage.type === msg.response.next) loadDisplay(1);
 };
 
+// a display takes its turn when loaded, a failed video also takes its turn to show its unavailable card
+const canRotate = (display) => display.timing?.totalScreens > 0
+	&& (display.status === STATUS.loaded || (display.status === STATUS.failed && !!display.isEnabledForRotation?.()));
+
 // navigate to next or previous
 const navTo = (direction) => {
 	if (!locationActive) return;
@@ -122,7 +126,7 @@ const navTo = (direction) => {
 			// Check if displayCount is within bounds and the display exists
 			if (displayCount < displays.length && displays[displayCount]) {
 				const display = displays[displayCount];
-				if (display.status === STATUS.loaded && display.timing?.totalScreens > 0) {
+				if (canRotate(display)) {
 					firstDisplay = display;
 				}
 			}
@@ -154,7 +158,7 @@ const loadDisplay = (direction) => {
 	for (let i = 0; i < totalDisplays; i += 1) {
 		// convert form simple 0-10 to start at current display index +/-1 and wrap
 		idx = wrap(curIdx + (i + 1) * direction, totalDisplays);
-		if (displays[idx].status === STATUS.loaded && displays[idx].timing.totalScreens > 0) {
+		if (canRotate(displays[idx])) {
 			// Prevent infinite recursion by ensuring we don't select the same display
 			if (idx !== curIdx) {
 				foundSuitableDisplay = true;
@@ -164,7 +168,7 @@ const loadDisplay = (direction) => {
 	}
 
 	// If no other suitable display was found, but current display is still suitable (e.g. user only enabled one display), stay on it
-	if (!foundSuitableDisplay && displays[curIdx] && displays[curIdx].status === STATUS.loaded && displays[curIdx].timing.totalScreens > 0) {
+	if (!foundSuitableDisplay && displays[curIdx] && canRotate(displays[curIdx])) {
 		idx = curIdx;
 		foundSuitableDisplay = true;
 	}

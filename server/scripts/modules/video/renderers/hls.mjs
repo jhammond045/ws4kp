@@ -78,6 +78,8 @@ class HlsRenderer {
 		this.hls = null;
 		this.usingNative = false;
 		this.timeUpdateHandler = null;
+		// set by the display, called when playback fails after mounting
+		this.onFail = null;
 	}
 
 	createVideoElement() {
@@ -109,8 +111,12 @@ class HlsRenderer {
 		this.container.append(this.video);
 
 		await this.attachSource();
+		// disposed while loading
+		if (!this.video) return;
 		await waitForMetadata(this.video);
+		if (!this.video) return;
 		this.applyStartAndEndBounds();
+		this.video.addEventListener('error', () => this.onFail?.(new Error('Video playback error')));
 	}
 
 	async attachSource() {
@@ -123,6 +129,7 @@ class HlsRenderer {
 		}
 
 		const Hls = await loadHlsLibrary();
+		if (!this.video) return;
 		if (!Hls.isSupported()) {
 			throw new Error('Hls.js reports unsupported environment');
 		}
@@ -144,12 +151,18 @@ class HlsRenderer {
 
 			const onManifestParsed = () => {
 				cleanup();
+				// later fatal errors (stream gone, network down) show the unavailable card
+				this.hls.on(Hls.Events.ERROR, (errorEvent, data) => {
+					if (data?.fatal) this.onFail?.(new Error(data.details || 'Unknown Hls.js error'));
+				});
 				resolve();
 			};
 
 			const onError = (event, data) => {
+				// hls.js recovers from non-fatal errors itself
+				if (!data?.fatal) return;
 				cleanup();
-				reject(new Error(data?.details || 'Unknown Hls.js error'));
+				reject(new Error(data.details || 'Unknown Hls.js error'));
 			};
 
 			this.hls.on(Hls.Events.MEDIA_ATTACHED, onAttached);
@@ -190,6 +203,8 @@ class HlsRenderer {
 		if (!this.video) return;
 		try {
 			await waitForMetadata(this.video);
+			// never heard off screen, play() sets the source's mute again
+			this.video.muted = true;
 			const playResult = this.video.play();
 			if (playResult && typeof playResult.then === 'function') {
 				await playResult;
@@ -208,6 +223,7 @@ class HlsRenderer {
 		if (typeof this.source.startAt === 'number') {
 			this.video.currentTime = this.source.startAt;
 		}
+		this.video.muted = this.source.muted !== false;
 		const result = this.video.play();
 		if (result && typeof result.catch === 'function') {
 			result.catch(() => {});
@@ -265,6 +281,7 @@ class HlsRenderer {
 	}
 
 	dispose() {
+		this.onFail = null;
 		if (this.timeUpdateHandler && this.video) {
 			this.video.removeEventListener('timeupdate', this.timeUpdateHandler);
 			this.timeUpdateHandler = null;

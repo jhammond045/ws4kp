@@ -1,6 +1,8 @@
 import { extractYouTubeId } from '../detect.mjs';
 
 const API_SRC = 'https://www.youtube.com/iframe_api';
+// privacy-enhanced embeds, the player's postMessage origin must match this host
+const EMBED_HOST = 'https://www.youtube-nocookie.com';
 let youtubeApiPromise;
 
 const loadYouTubeAPI = () => {
@@ -58,6 +60,9 @@ class YouTubeRenderer {
 		this.container = null;
 		this.isReady = false;
 		this.playerElement = null;
+		this.disposed = false;
+		// set by the display, called for errors after the player is ready
+		this.onFail = null;
 	}
 
 	buildPlayerVars(videoId) {
@@ -99,6 +104,7 @@ class YouTubeRenderer {
 		if (!videoId) throw new Error('Invalid YouTube URL');
 
 		const YT = await loadYouTubeAPI();
+		if (this.disposed) return;
 
 		this.playerElement = document.createElement('div');
 		this.playerElement.className = 'video-renderer__youtube';
@@ -106,6 +112,7 @@ class YouTubeRenderer {
 
 		await new Promise((resolve, reject) => {
 			this.player = new YT.Player(this.playerElement, {
+				host: EMBED_HOST,
 				videoId,
 				width: '100%',
 				height: '100%',
@@ -128,7 +135,13 @@ class YouTubeRenderer {
 						resolve();
 					},
 					onError: (error) => {
-						reject(new Error(`YouTube player error: ${error.data}`));
+						const failure = new Error(`YouTube player error: ${error.data}`);
+						// a removed or private video often errors after it reports ready
+						if (this.isReady) {
+							this.onFail?.(failure);
+						} else {
+							reject(failure);
+						}
 					},
 				},
 			});
@@ -138,6 +151,8 @@ class YouTubeRenderer {
 	async prewarm() {
 		if (!this.player || !this.isReady) return;
 		try {
+			// never heard off screen, play() sets the source's mute again
+			this.player.mute();
 			await this.player.playVideo();
 			await new Promise((resolve) => {
 				setTimeout(resolve, 150);
@@ -176,6 +191,8 @@ class YouTubeRenderer {
 	}
 
 	dispose() {
+		this.disposed = true;
+		this.onFail = null;
 		if (this.player) {
 			this.player.destroy();
 			this.player = null;

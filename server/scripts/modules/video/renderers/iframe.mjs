@@ -1,10 +1,26 @@
 import { isAllowedMediaUrl } from '../sources.mjs';
 
+// a page from this site (or about:blank, which takes this site's origin) could remove its own sandbox
+// if it also had allow-same-origin, so only other http(s) sites get it
+export const iframeSandbox = (src, origin) => {
+	const tokens = ['allow-scripts', 'allow-presentation', 'allow-popups'];
+	if (isAllowedMediaUrl(src) && new URL(src.trim()).origin !== origin) tokens.push('allow-same-origin');
+	return tokens.join(' ');
+};
+
 class IframeRenderer {
 	constructor(source) {
 		this.source = { ...source };
 		this.iframe = null;
 		this.container = null;
+		// paused iframes are emptied, there's no way to pause an unknown page
+		this.blanked = false;
+	}
+
+	setSource() {
+		this.iframe.sandbox = iframeSandbox(this.source.url, window.location.origin);
+		this.iframe.src = this.source.url;
+		this.blanked = false;
 	}
 
 	async mount(container) {
@@ -19,10 +35,8 @@ class IframeRenderer {
 		this.iframe.className = 'video-renderer__iframe';
 		this.iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
 		this.iframe.allowFullscreen = true;
-		this.iframe.setAttribute('loading', 'lazy');
-		this.iframe.sandbox = 'allow-scripts allow-same-origin allow-presentation allow-popups';
 		this.iframe.title = this.source.title || 'Embedded video';
-		this.iframe.src = this.source.url;
+		this.setSource();
 
 		this.container.append(this.iframe);
 	}
@@ -34,15 +48,15 @@ class IframeRenderer {
 	}
 
 	play() {
-		if (this.iframe) {
-			// Generic iframes cannot be controlled programmatically.
-		}
+		if (!this.iframe || !this.blanked || !isAllowedMediaUrl(this.source.url)) return;
+		this.setSource();
 	}
 
 	pause() {
-		if (this.iframe) {
-			// If playback needs to stop, reload the iframe to reset state.
-		}
+		if (!this.iframe || this.blanked) return;
+		this.iframe.sandbox = iframeSandbox('about:blank', window.location.origin);
+		this.iframe.src = 'about:blank';
+		this.blanked = true;
 	}
 
 	dispose() {
@@ -55,10 +69,10 @@ class IframeRenderer {
 	update(source) {
 		this.source = { ...source };
 		if (!this.iframe) return;
-		if (isAllowedMediaUrl(this.source.url)) {
-			this.iframe.src = this.source.url;
-		} else {
+		if (!isAllowedMediaUrl(this.source.url)) {
 			this.iframe.removeAttribute('src');
+		} else if (!this.blanked) {
+			this.setSource();
 		}
 	}
 }
