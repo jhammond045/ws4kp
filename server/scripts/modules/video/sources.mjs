@@ -2,6 +2,8 @@ const STORAGE_KEY = 'ws.video.sources';
 const PERMALINK_FLAG_KEY = 'ws.video.include';
 const ALLOWED_TYPES = new Set(['auto', 'youtube', 'hls', 'iframe']);
 const DEFAULT_DURATION = 20;
+// each source is a display with its own player, a link with hundreds of them would keep the page heavy
+export const MAX_SOURCES = 20;
 const DEFAULTS = {
 	title: '',
 	url: '',
@@ -182,7 +184,8 @@ const loadFromStorage = () => {
 		if (!Array.isArray(parsed)) return [];
 		return parsed
 			.map((item) => normalizeSource(item))
-			.filter((item) => item.url !== '');
+			.filter((item) => item.url !== '')
+			.slice(0, MAX_SOURCES);
 	} catch (error) {
 		console.warn('Failed to read stored video sources', error);
 		return [];
@@ -306,10 +309,7 @@ const loadFromQueryString = () => {
 
 	const expanded = collectExpandedQuerySources(params);
 
-	const combined = [...compact, ...expanded];
-
-	// Optional legacy integration: if parseQueryString captured any video data
-	return combined;
+	return [...compact, ...expanded].slice(0, MAX_SOURCES);
 };
 
 // Once a shared link's videos are imported, drop the video params so a refresh
@@ -347,7 +347,9 @@ hydrateInitialSources();
 
 export const getVideoSources = () => cloneSources();
 
+// null when the list is full
 export const addVideoSource = (partial = {}) => {
+	if (sources.length >= MAX_SOURCES) return null;
 	const newSource = normalizeSource(partial);
 	sources.push(newSource);
 	persist();

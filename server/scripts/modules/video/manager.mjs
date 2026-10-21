@@ -589,6 +589,8 @@ const handleAddClick = (state) => {
 		url: '',
 		durationSec: defaultSource.durationSec,
 	});
+	// the list is full, see MAX_SOURCES
+	if (!newSource) return;
 
 	if (state) {
 		state.pendingFocusId = newSource.id;

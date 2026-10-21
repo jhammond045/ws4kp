@@ -165,3 +165,13 @@ test('an unknown type falls back to auto', async () => {
 	assert.equal(addVideoSource({ url: 'https://e.test/a', type: 'flash' }).type, 'auto');
 	assert.equal(addVideoSource({ url: 'https://e.test/a', type: 'IFRAME' }).type, 'iframe');
 });
+
+test('a link or stored list brings in at most MAX_SOURCES sources, and adding stops there', async () => {
+	const many = Array.from({ length: 30 }, (_, i) => `video_${i}_url=https://e.test/${i}.m3u8`).join('&');
+	const fromLink = await load(`?${many}`);
+	assert.equal(fromLink.getVideoSources().length, fromLink.MAX_SOURCES);
+	assert.equal(fromLink.addVideoSource({ url: 'https://e.test/extra.m3u8' }), null);
+	const stored = JSON.stringify(Array.from({ length: 30 }, (_, i) => ({ url: `https://e.test/${i}.m3u8` })));
+	const fromStorage = await load('', { 'ws.video.sources': stored });
+	assert.equal(fromStorage.getVideoSources().length, fromStorage.MAX_SOURCES);
+});
