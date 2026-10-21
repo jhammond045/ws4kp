@@ -125,6 +125,8 @@ class YouTubeRenderer {
 				events: {
 					onReady: (event) => {
 						this.isReady = true;
+						// keyboard focus stays on the page, where the OSD's keys work
+						event.target.getIframe?.()?.setAttribute('tabindex', '-1');
 						if (this.source.muted !== false) {
 							event.target.mute();
 						} else {

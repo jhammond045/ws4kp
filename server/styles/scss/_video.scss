@@ -25,6 +25,9 @@
 		position: absolute;
 		inset: 0;
 		display: flex;
+		// nothing to click on a kiosk screen, and a click would move keyboard focus into a cross-origin frame
+		// where the OSD's keys no longer reach the page
+		pointer-events: none;
 	}
 
 	.video-display__player iframe,

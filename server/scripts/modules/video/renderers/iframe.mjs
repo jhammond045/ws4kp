@@ -39,6 +39,8 @@ class IframeRenderer {
 		this.iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
 		this.iframe.allowFullscreen = true;
 		this.iframe.title = this.source.title || 'Embedded video';
+		// keyboard focus stays on the page, where the OSD's keys work
+		this.iframe.tabIndex = -1;
 		// the fallback resolves once the page has loaded, so a host that never answers runs into the display's load timeout
 		// a page that refuses to be framed still fires load, the browser shows its error page in the frame
 		const loaded = this.waitForLoad && new Promise((resolve) => {

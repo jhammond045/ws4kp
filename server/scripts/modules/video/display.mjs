@@ -110,6 +110,8 @@ class VideoDisplay extends WeatherDisplay {
 
 		this.elem.dataset.initialized = 'true';
 		this.elem.classList.add('video-display-root');
+		// out of the tab order and the accessibility tree until its turn, see showCanvas
+		this.elem.inert = true;
 		this.elem.innerHTML = '';
 
 		const header = document.createElement('div');
@@ -349,6 +351,7 @@ class VideoDisplay extends WeatherDisplay {
 
 	showCanvas(navCmd) {
 		this.clearPrewarmTimer();
+		if (this.elem) this.elem.inert = false;
 		super.showCanvas(navCmd);
 		// the turn starts, the next one may prewarm again
 		this.prewarmed = false;
@@ -364,6 +367,8 @@ class VideoDisplay extends WeatherDisplay {
 	hideCanvas() {
 		// navigation hides every display on each change, only act on the one that was showing
 		const wasShowing = this.elem?.classList.contains('show');
+		// also takes keyboard focus back out of a player's frame
+		if (this.elem) this.elem.inert = true;
 		super.hideCanvas();
 		if (!wasShowing || this.disposed) return;
 		this.pausePlayback();
