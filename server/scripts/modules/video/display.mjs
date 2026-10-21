@@ -34,6 +34,11 @@ const ensurePreconnect = (type, url) => {
 	});
 };
 
+// the editor keeps an end time that isn't after the start so the manager can flag it, players never get it
+const playableSource = (source) => (source.endAt !== null && source.endAt !== undefined && source.endAt <= (source.startAt ?? 0)
+	? { ...source, endAt: null }
+	: source);
+
 const formatDisplayTitle = (title) => {
 	if (typeof title !== 'string') return DEFAULT_TITLE;
 	const trimmed = title.trim();
@@ -243,7 +248,7 @@ class VideoDisplay extends WeatherDisplay {
 		const type = this.mode || detectSourceType(this.source);
 		ensurePreconnect(type, this.source.url);
 		const Renderer = RENDERERS[type] || RENDERERS.iframe;
-		const player = new Renderer(this.source);
+		const player = new Renderer(playableSource(this.source));
 		this.player = player;
 		// errors after the player is up (a removed YouTube video, a dead stream) also show the card
 		player.onFail = (error) => {
@@ -324,9 +329,10 @@ class VideoDisplay extends WeatherDisplay {
 	updateSource(source) {
 		const nextMode = detectSourceType(source);
 		const modeChanged = nextMode !== this.mode;
-		// the title and duration don't touch the player, so the video on screen keeps playing
+		// the title, duration and preload time don't touch the player, so the video on screen keeps playing
+		const inPlace = ['title', 'durationSec', 'preloadSec'];
 		const playerChanged = Object.keys({ ...source, ...this.source })
-			.some((key) => key !== 'title' && key !== 'durationSec' && source[key] !== this.source[key]);
+			.some((key) => !inPlace.includes(key) && source[key] !== this.source[key]);
 		this.source = { ...source };
 		this.mode = nextMode;
 		this.buildTiming();
@@ -341,7 +347,7 @@ class VideoDisplay extends WeatherDisplay {
 			this.load();
 			return;
 		}
-		this.player.update(this.source);
+		this.player.update(playableSource(this.source));
 		this.scheduleStandbyPrewarm();
 	}
 

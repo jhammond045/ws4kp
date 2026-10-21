@@ -782,6 +782,15 @@
   letter-spacing: 0.05em;
 }
 
+// shown for web page sources, a hint rather than an error
+.settings-video__note {
+  grid-column: span 4;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(230, 240, 255, 0.7);
+}
+
 .settings-video__issues {
   margin: 0;
   padding-left: 0;

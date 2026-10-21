@@ -136,10 +136,11 @@ const normalizeSource = (raw = {}, { strict = true } = {}) => {
 			max: 86400,
 			allowNull: true,
 		});
+		// the editor keeps an end before the start so its card can say so, the display ignores it
 		if (
-			normalized.endAt !== null
-      && normalized.startAt !== null
-      && normalized.endAt <= normalized.startAt
+			strict
+			&& normalized.endAt !== null
+			&& normalized.endAt <= normalized.startAt
 		) {
 			normalized.endAt = null;
 		}
@@ -217,17 +218,18 @@ const decodeCompactValue = (value) => {
 	try {
 		const json = JSON.parse(base64UrlDecode(value));
 		if (!json) return null;
+		// one-letter keys keep the link short, the long names are from links made before them
 		const mapped = {
 			title: json.t ?? json.title,
 			url: json.u ?? json.url,
 			durationSec: json.d ?? json.duration,
-			type: json.type,
-			muted: json.muted,
-			loop: json.loop,
-			preloadSec: json.preloadSec ?? json.preload,
-			poster: json.poster,
-			startAt: json.startAt ?? json.start,
-			endAt: json.endAt ?? json.end,
+			type: json.y ?? json.type,
+			muted: json.m ?? json.muted,
+			loop: json.l ?? json.loop,
+			preloadSec: json.p ?? json.preloadSec ?? json.preload,
+			poster: json.i ?? json.poster,
+			startAt: json.s ?? json.startAt ?? json.start,
+			endAt: json.e ?? json.endAt ?? json.end,
 		};
 		return normalizeSource(mapped);
 	} catch (error) {
@@ -409,20 +411,18 @@ export const clearVideoSources = () => {
 
 export const encodeSourceForPermalink = (source) => {
 	const normalized = normalizeSource(source);
+	// fields left at their default are left out, decoding fills them in again
 	return base64UrlEncode({
 		t: normalized.title,
 		u: normalized.url,
 		d: normalized.durationSec,
-		type: normalized.type !== DEFAULTS.type ? normalized.type : undefined,
-		muted: normalized.muted === DEFAULTS.muted ? undefined : normalized.muted,
-		loop: normalized.loop === DEFAULTS.loop ? undefined : normalized.loop,
-		preloadSec:
-			normalized.preloadSec === DEFAULTS.preloadSec
-				? undefined
-				: normalized.preloadSec,
-		poster: normalized.poster || undefined,
-		startAt: normalized.startAt || undefined,
-		endAt: normalized.endAt ?? undefined,
+		y: normalized.type !== DEFAULTS.type ? normalized.type : undefined,
+		m: normalized.muted === DEFAULTS.muted ? undefined : normalized.muted,
+		l: normalized.loop === DEFAULTS.loop ? undefined : normalized.loop,
+		p: normalized.preloadSec === DEFAULTS.preloadSec ? undefined : normalized.preloadSec,
+		i: normalized.poster || undefined,
+		s: normalized.startAt || undefined,
+		e: normalized.endAt ?? undefined,
 	});
 };
 // Always include videos in permalink

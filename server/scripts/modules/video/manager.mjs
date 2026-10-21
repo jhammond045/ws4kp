@@ -29,22 +29,19 @@ const cssEscape = (value) => {
 	return value;
 };
 
+// immediate still waits for the current event to finish: a change event fires as Tab moves focus,
+// and the card is drawn again only after the next field has focus, so that field keeps it
 const scheduleUpdate = (id, patch, { delay = 250, immediate = false } = {}) => {
 	if (!pendingUpdates.has(id)) {
 		pendingUpdates.set(id, {});
 	}
 	Object.assign(pendingUpdates.get(id), patch);
 
-	if (immediate) {
-		flushUpdate(id);
-		return;
-	}
-
 	if (updateTimers.has(id)) {
 		clearTimeout(updateTimers.get(id));
 	}
 
-	const timeout = setTimeout(() => flushUpdate(id), delay);
+	const timeout = setTimeout(() => flushUpdate(id), immediate ? 0 : delay);
 	updateTimers.set(id, timeout);
 };
 
@@ -66,6 +63,10 @@ const computeIssues = (source) => {
 		issues.push('URL is required');
 	} else if (!isAllowedMediaUrl(trimmedUrl)) {
 		issues.push('URL must start with http:// or https://');
+	}
+
+	if (source.poster && !isAllowedMediaUrl(source.poster)) {
+		issues.push('Poster URL must start with http:// or https://');
 	}
 
 	if (source.durationSec < 5) {
@@ -178,6 +179,54 @@ const renderNumberField = (
 	wrapper.append(labelElem, input);
 	return wrapper;
 };
+
+const renderSelectField = (
+	state,
+	source,
+	label,
+	key,
+	options,
+	{ span: spanSize } = {},
+) => {
+	const wrapper = document.createElement('label');
+	wrapper.className = 'video-field';
+	wrapper.dataset.fieldKey = key;
+	if (spanSize) wrapper.dataset.span = spanSize;
+
+	const labelElem = document.createElement('span');
+	labelElem.className = 'video-field__label';
+	labelElem.textContent = label;
+
+	const select = document.createElement('select');
+	select.className = 'video-field__select';
+	select.dataset.fieldKey = key;
+	select.dataset.fieldType = 'select';
+	select.dataset.sourceId = source.id;
+	options.forEach(([value, text]) => {
+		const option = document.createElement('option');
+		option.value = value;
+		option.textContent = text;
+		select.append(option);
+	});
+	select.value = source[key];
+
+	select.addEventListener('change', (event) => {
+		scheduleUpdate(source.id, { [key]: event.target.value }, { immediate: true });
+	});
+
+	wrapper.append(labelElem, select);
+	return wrapper;
+};
+
+const TYPE_OPTIONS = [
+	['auto', 'Auto'],
+	['youtube', 'YouTube'],
+	['hls', 'HLS (.m3u8)'],
+	['iframe', 'Web page'],
+];
+
+// a page can refuse to be framed (X-Frame-Options), and this page has no way to find out
+const IFRAME_NOTE = 'Some sites refuse to be embedded; if this shows an error page, the site does not allow embedding.';
 
 const renderCheckboxField = (
 	state,
@@ -337,10 +386,13 @@ const renderSourceCard = (state, source, index) => {
 			placeholder: 'https://…',
 			span: 'three-quarters',
 		}),
+		renderSelectField(state, source, 'Type', 'type', TYPE_OPTIONS, {
+			span: 'quarter',
+		}),
 		renderNumberField(state, source, 'Duration (sec)', 'durationSec', {
 			min: 5,
 			max: 3600,
-			span: 'half',
+			span: 'quarter',
 		}),
 		renderCheckboxField(state, source, 'Muted', 'muted', {
 			span: 'quarter',
@@ -348,7 +400,34 @@ const renderSourceCard = (state, source, index) => {
 		renderCheckboxField(state, source, 'Loop', 'loop', {
 			span: 'quarter',
 		}),
+		renderNumberField(state, source, 'Preload (sec)', 'preloadSec', {
+			min: 0,
+			max: 120,
+			span: 'quarter',
+		}),
+		renderNumberField(state, source, 'Start at (sec)', 'startAt', {
+			min: 0,
+			max: 86400,
+			span: 'quarter',
+		}),
+		renderNumberField(state, source, 'End at (sec)', 'endAt', {
+			min: 0,
+			max: 86400,
+			allowNull: true,
+			span: 'half',
+		}),
+		renderTextField(state, source, 'Poster URL (HLS)', 'poster', 'url', {
+			placeholder: 'https://… (optional)',
+			span: 'full',
+		}),
 	);
+
+	if (source.url.trim() && detectSourceType(source) === 'iframe') {
+		const note = document.createElement('p');
+		note.className = 'settings-video__note';
+		note.textContent = IFRAME_NOTE;
+		body.append(note);
+	}
 
 	const issues = computeIssues(source);
 

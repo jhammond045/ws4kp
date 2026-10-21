@@ -1,3 +1,5 @@
+import { isAllowedMediaUrl } from '../sources.mjs';
+
 const HLS_LIBRARY_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
 
 let hlsLibraryPromise;
@@ -94,8 +96,9 @@ class HlsRenderer {
 		video.preload = 'auto';
 		video.setAttribute('webkit-playsinline', '');
 		video.setAttribute('playsinline', '');
-		if (this.source.poster) {
-			video.poster = this.source.poster;
+		// the editor can hold a half-typed poster URL, only http(s) reaches the page
+		if (isAllowedMediaUrl(this.source.poster)) {
+			video.poster = this.source.poster.trim();
 		}
 		if (this.source.crossOrigin) {
 			video.crossOrigin = this.source.crossOrigin;
@@ -248,6 +251,11 @@ class HlsRenderer {
 		this.video.loop = Boolean(this.source.loop)
       && (!this.source.startAt || this.source.startAt === 0)
       && (this.source.endAt === null || this.source.endAt === undefined);
+		if (isAllowedMediaUrl(this.source.poster)) {
+			this.video.poster = this.source.poster.trim();
+		} else {
+			this.video.removeAttribute('poster');
+		}
 
 		if (previousUrl !== this.source.url) {
 			this.reloadSource()
